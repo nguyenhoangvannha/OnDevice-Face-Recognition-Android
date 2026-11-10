@@ -158,4 +158,6 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
 - Push tag `v0.0.1-20261110.15730b9` → workflow Release thành công; prerelease có APK đã ký bằng khoá mới (kiểm bằng apksigner).
 - CI cho `15730b9` (push + PR #1 do anh mở trong fork): xanh.
 - Chạy tay release qua GitHub chưa được vì workflow mới chưa có trên `main` (xem [ci-and-release.md](ci-and-release.md)).
+- CI push của `b93ba73` đỏ: `BackendControllerTest.requestedGpuIsRestoredOnStartup` có race (GPU nền xong trước khi test kịp kiểm
+  "CPU trước"). Lỗi ở test, không phải ở app. Sửa bằng cổng `CompletableDeferred` giữ việc lấy model GPU; chạy lại 3 lần đều qua.
 

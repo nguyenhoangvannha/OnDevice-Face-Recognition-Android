@@ -1,5 +1,6 @@
 package com.ml.shubham0204.facenet_android.engine.backend
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,12 +46,16 @@ private class FakeProvider : ModelProvider {
     var gpuFailsOnEmbed = false
     var gpuOnEmbed: () -> Unit = {}
 
+    /** When set, getting the GPU model waits for it, so a test can observe the CPU-first state. */
+    var gpuGate: CompletableDeferred<Unit>? = null
+
     override fun isLocal(spec: ModelSpec) = spec.backend in local
 
     override suspend fun ensureLocal(
         spec: ModelSpec,
         onProgress: (Long, Long?) -> Unit,
     ): String {
+        if (spec.backend == InferenceBackend.GPU) gpuGate?.await()
         if (spec.backend !in local) {
             if (downloadFails) throw IllegalStateException("download failed: HTTP 404")
             onProgress(50, 100)
@@ -120,10 +125,12 @@ class BackendControllerTest {
     @Test
     fun requestedGpuIsRestoredOnStartup() =
         runBlocking {
-            val provider = FakeProvider().apply { local += InferenceBackend.GPU }
+            val gate = CompletableDeferred<Unit>()
+            val provider = FakeProvider().apply { local += InferenceBackend.GPU; gpuGate = gate }
             val c = controller(provider, MemoryPrefs(requestedBackend = InferenceBackend.GPU))
             c.initialize()
             assertEquals(InferenceBackend.CPU, c.status.value.active) // CPU first, GPU in background
+            gate.complete(Unit)
             c.awaitSwitch()
             assertEquals(InferenceBackend.GPU, c.status.value.active)
         }
