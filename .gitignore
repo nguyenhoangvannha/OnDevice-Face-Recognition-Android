@@ -10,3 +10,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Downloaded at build time by the downloadModel task (~94 MB)
+app/src/main/assets/model.pte
