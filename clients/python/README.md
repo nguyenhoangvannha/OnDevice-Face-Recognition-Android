@@ -19,6 +19,7 @@ export XPERIA_FACE_TOKEN=...            # dán từ dashboard, không lưu vào 
 python3 xperia_face_client.py health
 python3 xperia_face_client.py recognize snapshot.jpg
 python3 xperia_face_client.py enroll "An" an1.jpg an2.jpg
+python3 xperia_face_client.py add-images 1 an3.jpg an4.jpg
 python3 xperia_face_client.py persons
 python3 xperia_face_client.py delete 3
 ```

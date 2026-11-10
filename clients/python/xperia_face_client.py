@@ -74,6 +74,12 @@ class XperiaFaceClient:
         body, content_type = _multipart([("name", name)], files)
         return self._request("POST", "/api/enroll", body, content_type)
 
+    def add_images(self, person_id: int, images: Iterable[ImageInput]) -> dict:
+        """Adds 1..10 images (one face each) to an existing person."""
+        files = [("image", _load(img)) for img in images]
+        body, content_type = _multipart([], files)
+        return self._request("POST", "/api/persons/%d/images" % int(person_id), body, content_type)
+
     def persons(self) -> List[dict]:
         return self._request("GET", "/api/persons")["persons"]
 
@@ -158,6 +164,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("enroll")
     p.add_argument("name")
     p.add_argument("images", nargs="+")
+    p = sub.add_parser("add-images")
+    p.add_argument("person_id", type=int)
+    p.add_argument("images", nargs="+")
     p = sub.add_parser("delete")
     p.add_argument("person_id", type=int)
     args = parser.parse_args(argv)
@@ -174,6 +183,8 @@ def main(argv=None) -> int:
             out = client.recognize(args.image, liveness=args.liveness)
         elif args.cmd == "enroll":
             out = client.enroll(args.name, args.images)
+        elif args.cmd == "add-images":
+            out = client.add_images(args.person_id, args.images)
         else:
             out = client.delete_person(args.person_id)
     except (CoprocessorError, ValueError, OSError) as e:

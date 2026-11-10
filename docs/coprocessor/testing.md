@@ -12,7 +12,7 @@ bash ./gradlew testDebugUnitTest
 | Test | Phạm vi |
 | --- | --- |
 | `engine/SimilarityMathTest` | cosine similarity, vector 0/rỗng, khác kích thước, ngưỡng bao gồm bằng, NaN, láng giềng gần nhất |
-| `coprocessor/server/FaceApiModuleTest` | health không cần token và không lộ thông tin máy; 401 khi thiếu/sai token; recognize trả snake_case + ghi log; 400 thiếu ảnh / ảnh hỏng / ảnh rỗng; 413 quá cỡ; 415 không phải multipart; enroll 400/422/201; persons list; delete 400/404/200 |
+| `coprocessor/server/FaceApiModuleTest` | health không cần token và không lộ thông tin máy; 401 khi thiếu/sai token; recognize trả snake_case + ghi log; 400 thiếu ảnh / ảnh hỏng / ảnh rỗng; 413 quá cỡ; 415 không phải multipart; enroll 400/422/201; thêm ảnh 401/400/404/422/200; persons list; delete 400/404/200 |
 | `coprocessor/server/FaceApiServerTest` | Ktor CIO thật trên cổng local: health 200, 401/200 theo token, stop; báo lỗi khi port bị chiếm |
 | `coprocessor/TokenUtilsTest` | token 43 ký tự URL-safe, ngẫu nhiên; so khớp, null, rỗng |
 | `coprocessor/CoprocessorStateHolderTest` | log giữ N request mới nhất, đếm tổng |
@@ -25,7 +25,7 @@ Test REST chạy với backend giả, nên **không** kiểm model thật, ML Ki
 cd clients/python && python3 -m unittest -v test_xperia_face_client
 ```
 
-7 test với server HTTP giả: bắt buộc biến môi trường, `repr` không lộ token, multipart recognize/enroll, lỗi 401/404,
+8 test với server HTTP giả: bắt buộc biến môi trường, `repr` không lộ token, multipart recognize/enroll/add-images, lỗi 401/404,
 `recognize_snapshot` trả `None` khi timeout hoặc không kết nối được.
 
 ## Kiểm thử trên máy thật (chưa làm)

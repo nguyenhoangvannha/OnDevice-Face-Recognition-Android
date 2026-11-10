@@ -79,4 +79,15 @@ Commit: `264a040 feat(ui): add Coprocessor Server dashboard`.
 - Hiệu chỉnh ngưỡng bằng ảnh camera thật.
 - Tích hợp phía homelab (notifier/Frigate trên Mac Mini hoặc Armbian Phố): chưa làm, cần anh chọn.
 - Quyết định có loại DB ObjectBox (embedding khuôn mặt) khỏi Android backup không.
-- Chưa có endpoint thêm ảnh cho người đã có; chưa có UI test.
+- Chưa có UI test.
+
+Commit: `745d416 feat(client): add stdlib Python client for the coprocessor API`.
+
+# Vòng 2
+
+## 2026-11-10 — Bước 1: thêm ảnh cho người đã có
+
+- `POST /api/persons/{id}/images` (bearer, 1..10 ảnh, cùng giới hạn kích thước; 404 id lạ; 422 không ảnh nào có đúng 1 mặt; 200 khi thêm được).
+- `FaceRecognitionEngine.addImages()` dùng chung bước "1 mặt / ảnh → embedding" với enroll; cập nhật `num_images` của người.
+- Client Python: `add_images()` + lệnh `add-images`.
+- `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**, 20/20 test; client Python 8/8.

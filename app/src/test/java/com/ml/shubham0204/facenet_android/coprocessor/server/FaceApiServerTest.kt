@@ -17,6 +17,8 @@ class FaceApiServerTest {
 
         override suspend fun enroll(name: String, images: List<ByteArray>): EnrollResult = error("unused")
 
+        override suspend fun addImages(personId: Long, images: List<ByteArray>): EnrollResult? = null
+
         override suspend fun listPersons(): List<PersonSummary> = emptyList()
 
         override suspend fun deletePerson(personId: Long): Boolean = false

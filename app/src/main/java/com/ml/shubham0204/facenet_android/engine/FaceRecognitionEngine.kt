@@ -89,17 +89,7 @@ class FaceRecognitionEngine(
         name: String,
         images: List<Bitmap>,
     ): EnrollResult {
-        val embeddings = ArrayList<FloatArray>()
-        val rejected = ArrayList<RejectedImage>()
-        images.forEachIndexed { index, image ->
-            faceDetector
-                .getCroppedFace(image)
-                .onSuccess { embeddings += faceNet.getFaceEmbedding(it) }
-                .onFailure {
-                    val reason = (it as? AppException)?.errorCode?.message ?: "Face detection failed"
-                    rejected += RejectedImage(index, reason)
-                }
-        }
+        val (embeddings, rejected) = embedSingleFaces(images)
         if (embeddings.isEmpty()) {
             return EnrollResult(personId = null, name = name, imagesAccepted = 0, rejected = rejected)
         }
@@ -117,6 +107,43 @@ class FaceRecognitionEngine(
             )
         }
         return EnrollResult(personId, name, embeddings.size, rejected)
+    }
+
+    /**
+     * Adds face images to an existing person (same one-face-per-image rule as [enroll]).
+     * Returns null when the person does not exist; imagesAccepted = 0 means nothing was stored.
+     */
+    suspend fun addImages(
+        personId: Long,
+        images: List<Bitmap>,
+    ): EnrollResult? {
+        val person = personDB.get(personId) ?: return null
+        val (embeddings, rejected) = embedSingleFaces(images)
+        if (embeddings.isNotEmpty()) {
+            embeddings.forEach {
+                imagesVectorDB.addFaceImageRecord(
+                    FaceImageRecord(personID = personId, personName = person.personName, faceEmbedding = it),
+                )
+            }
+            person.numImages += embeddings.size
+            personDB.addPerson(person) // put() with an existing id updates the record
+        }
+        return EnrollResult(personId, person.personName, embeddings.size, rejected)
+    }
+
+    private suspend fun embedSingleFaces(images: List<Bitmap>): Pair<List<FloatArray>, List<RejectedImage>> {
+        val embeddings = ArrayList<FloatArray>()
+        val rejected = ArrayList<RejectedImage>()
+        images.forEachIndexed { index, image ->
+            faceDetector
+                .getCroppedFace(image)
+                .onSuccess { embeddings += faceNet.getFaceEmbedding(it) }
+                .onFailure {
+                    val reason = (it as? AppException)?.errorCode?.message ?: "Face detection failed"
+                    rejected += RejectedImage(index, reason)
+                }
+        }
+        return embeddings to rejected
     }
 
     fun listPersons(): List<PersonSummary> =

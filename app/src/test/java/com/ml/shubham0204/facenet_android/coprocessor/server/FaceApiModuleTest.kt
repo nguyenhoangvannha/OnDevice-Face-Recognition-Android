@@ -64,6 +64,18 @@ private class FakeBackend : CoprocessorBackend {
         return EnrollResult(2, name, images.size, emptyList())
     }
 
+    override suspend fun addImages(
+        personId: Long,
+        images: List<ByteArray>,
+    ): EnrollResult? {
+        val person = persons[personId] ?: return null
+        if (images.all { it.decodeToString() == "no-face" }) {
+            return EnrollResult(personId, person.name, 0, images.indices.map { RejectedImage(it, "No faces were in the image") })
+        }
+        persons[personId] = person.copy(numImages = person.numImages + images.size)
+        return EnrollResult(personId, person.name, images.size, emptyList())
+    }
+
     override suspend fun listPersons(): List<PersonSummary> = persons.values.toList()
 
     override suspend fun deletePerson(personId: Long): Boolean = persons.remove(personId) != null
@@ -193,6 +205,34 @@ class FaceApiModuleTest {
             val ok = client.post("/api/enroll") { auth(); setBody(form("Binh", 2)) }
             assertEquals(HttpStatusCode.Created, ok.status)
             assertEquals(2L, ok.json()["person_id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
+    fun addImagesToExistingPerson() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            fun form(vararg images: String) =
+                MultiPartFormDataContent(
+                    formData {
+                        images.forEachIndexed { i, content ->
+                            append("image", content.toByteArray(), Headers.build { append(HttpHeaders.ContentDisposition, "filename=\"$i.jpg\"") })
+                        }
+                    },
+                )
+            assertEquals(HttpStatusCode.Unauthorized, client.post("/api/persons/1/images") { setBody(form("a")) }.status)
+            assertEquals(HttpStatusCode.BadRequest, client.post("/api/persons/x/images") { auth(); setBody(form("a")) }.status)
+            assertEquals(HttpStatusCode.NotFound, client.post("/api/persons/99/images") { auth(); setBody(form("a")) }.status)
+            assertEquals("missing_image", client.post("/api/persons/1/images") { auth(); setBody(form()) }.json()["error"]!!.jsonPrimitive.content)
+            assertEquals("too_many_images", client.post("/api/persons/1/images") { auth(); setBody(form("a", "b", "c")) }.json()["error"]!!.jsonPrimitive.content)
+
+            val none = client.post("/api/persons/1/images") { auth(); setBody(form("no-face")) }
+            assertEquals(HttpStatusCode.UnprocessableEntity, none.status)
+            assertEquals(0, none.json()["images_accepted"]!!.jsonPrimitive.int)
+
+            val ok = client.post("/api/persons/1/images") { auth(); setBody(form("a", "b")) }
+            assertEquals(HttpStatusCode.OK, ok.status)
+            assertEquals(2, ok.json()["images_accepted"]!!.jsonPrimitive.int)
+            assertEquals(4L, backend.persons[1]!!.numImages)
         }
 
     @Test

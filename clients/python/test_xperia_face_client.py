@@ -48,6 +48,10 @@ class FakeApi(BaseHTTPRequestHandler):
             return self._send(401, {"error": "unauthorized", "message": "nope"})
         if self.path.startswith("/api/recognize"):
             return self._send(200, {"faces": [], "face_count": 0, "recognized_count": 0, "inference_ms": 5})
+        if self.path == "/api/persons/1/images":
+            return self._send(200, {"person_id": 1, "name": "An", "images_accepted": 1, "images_rejected": []})
+        if self.path.startswith("/api/persons/"):
+            return self._send(404, {"error": "not_found", "message": "No person"})
         if self.path == "/api/enroll":
             return self._send(201, {"person_id": 2, "name": "Binh", "images_accepted": 2, "images_rejected": []})
         self._send(404, {"error": "not_found", "message": ""})
@@ -98,6 +102,14 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(2, result["person_id"])
         self.assertIn(b'name="name"\r\n\r\nBinh', FakeApi.last_body)
         self.assertEqual(2, FakeApi.last_body.count(b'name="image"'))
+
+    def test_add_images(self):
+        result = self.client.add_images(1, [b"img"])
+        self.assertEqual(1, result["images_accepted"])
+        self.assertIn(b'name="image"', FakeApi.last_body)
+        with self.assertRaises(xfc.CoprocessorError) as ctx:
+            self.client.add_images(99, [b"img"])
+        self.assertEqual(404, ctx.exception.status)
 
     def test_api_errors_raise(self):
         bad = xfc.XperiaFaceClient(self.url, "wrong", timeout=2.0)

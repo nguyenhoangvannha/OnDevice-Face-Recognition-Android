@@ -46,6 +46,18 @@ class AndroidCoprocessorBackend(
             engine.enroll(name, bitmaps)
         }
 
+    override suspend fun addImages(
+        personId: Long,
+        images: List<ByteArray>,
+    ): EnrollResult? =
+        withContext(Dispatchers.Default) {
+            val bitmaps =
+                images.mapIndexed { i, bytes ->
+                    ImageDecoding.decode(bytes) ?: throw InvalidImageException("Image #$i could not be decoded")
+                }
+            engine.addImages(personId, bitmaps)
+        }
+
     override suspend fun listPersons(): List<PersonSummary> = withContext(Dispatchers.IO) { engine.listPersons() }
 
     override suspend fun deletePerson(personId: Long): Boolean = withContext(Dispatchers.IO) { engine.deletePerson(personId) }

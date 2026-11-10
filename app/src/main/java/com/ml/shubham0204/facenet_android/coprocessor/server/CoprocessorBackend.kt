@@ -17,6 +17,15 @@ interface CoprocessorBackend {
         images: List<ByteArray>,
     ): EnrollResult
 
+    /**
+     * Adds images to an existing person. Returns null when the person does not exist.
+     * @throws InvalidImageException when any image cannot be decoded.
+     */
+    suspend fun addImages(
+        personId: Long,
+        images: List<ByteArray>,
+    ): EnrollResult?
+
     suspend fun listPersons(): List<PersonSummary>
 
     /** Returns false when the person does not exist. */

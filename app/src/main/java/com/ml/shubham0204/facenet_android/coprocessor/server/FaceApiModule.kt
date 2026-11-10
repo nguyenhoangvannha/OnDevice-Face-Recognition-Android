@@ -143,18 +143,22 @@ fun Application.faceApiModule(
                     )
                     return@post
                 }
-                val images = payload.imageParts()
-                if (images.isEmpty()) {
-                    call.respond(HttpStatusCode.BadRequest, ApiError("missing_image", "Send 1..${limits.maxEnrollImages} files in field 'image'"))
-                    return@post
-                }
-                if (images.size > limits.maxEnrollImages) {
-                    call.respond(HttpStatusCode.BadRequest, ApiError("too_many_images", "At most ${limits.maxEnrollImages} images"))
-                    return@post
-                }
-                images.forEachIndexed { i, bytes -> if (bytes.isEmpty()) throw InvalidImageException("Image #$i is empty") }
+                val images = call.enrollImagesOrRespond(payload, limits) ?: return@post
                 val result = backend.enroll(name, images)
                 val status = if (result.personId != null) HttpStatusCode.Created else HttpStatusCode.UnprocessableEntity
+                call.respond(status, result.toResponse())
+            }
+
+            post("/api/persons/{id}/images") {
+                val id = call.personIdOrRespond() ?: return@post
+                val payload = call.readMultipart(limits)
+                val images = call.enrollImagesOrRespond(payload, limits) ?: return@post
+                val result = backend.addImages(id, images)
+                if (result == null) {
+                    call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No person with id $id"))
+                    return@post
+                }
+                val status = if (result.imagesAccepted > 0) HttpStatusCode.OK else HttpStatusCode.UnprocessableEntity
                 call.respond(status, result.toResponse())
             }
 
@@ -164,11 +168,7 @@ fun Application.faceApiModule(
             }
 
             delete("/api/persons/{id}") {
-                val id = call.parameters["id"]?.toLongOrNull()
-                if (id == null || id <= 0) {
-                    call.respond(HttpStatusCode.BadRequest, ApiError("invalid_id", "Person id must be a positive integer"))
-                    return@delete
-                }
+                val id = call.personIdOrRespond() ?: return@delete
                 if (backend.deletePerson(id)) {
                     call.respond(DeleteResponse(id))
                 } else {
@@ -177,6 +177,34 @@ fun Application.faceApiModule(
             }
         }
     }
+}
+
+/** Parses {id}; responds 400 and returns null when it is not a positive integer. */
+private suspend fun ApplicationCall.personIdOrRespond(): Long? {
+    val id = parameters["id"]?.toLongOrNull()
+    if (id == null || id <= 0) {
+        respond(HttpStatusCode.BadRequest, ApiError("invalid_id", "Person id must be a positive integer"))
+        return null
+    }
+    return id
+}
+
+/** 1..maxEnrollImages non-empty images; responds 400 and returns null otherwise. */
+private suspend fun ApplicationCall.enrollImagesOrRespond(
+    payload: MultipartPayload,
+    limits: ApiLimits,
+): List<ByteArray>? {
+    val images = payload.imageParts()
+    if (images.isEmpty()) {
+        respond(HttpStatusCode.BadRequest, ApiError("missing_image", "Send 1..${limits.maxEnrollImages} files in field 'image'"))
+        return null
+    }
+    if (images.size > limits.maxEnrollImages) {
+        respond(HttpStatusCode.BadRequest, ApiError("too_many_images", "At most ${limits.maxEnrollImages} images"))
+        return null
+    }
+    images.forEachIndexed { i, bytes -> if (bytes.isEmpty()) throw InvalidImageException("Image #$i is empty") }
+    return images
 }
 
 /** Files named 'image'; if none, any file parts (lenient for simple clients). */

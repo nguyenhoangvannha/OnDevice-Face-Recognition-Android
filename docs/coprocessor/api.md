@@ -17,6 +17,7 @@ Test: `app/src/test/.../coprocessor/server/FaceApiModuleTest.kt` (chạy trên J
 | GET | `/api/status` | có | Pin, nhiệt độ pin, thermal status, heap, số người, ngưỡng, uptime |
 | POST | `/api/recognize` | có | Nhận diện mọi khuôn mặt trong 1 ảnh |
 | POST | `/api/enroll` | có | Đăng ký người mới: `name` + 1..10 ảnh |
+| POST | `/api/persons/{id}/images` | có | Thêm 1..10 ảnh cho người đã có |
 | GET | `/api/persons` | có | Danh sách người đã đăng ký |
 | DELETE | `/api/persons/{id}` | có | Xoá người và mọi embedding của họ |
 
@@ -111,7 +112,25 @@ curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
 
 Lỗi khác: `400 invalid_name`, `400 missing_image`, `400 too_many_images`, `400 invalid_image` (một ảnh không decode được → không lưu gì), `413`, `415`, `401`.
 
-Mỗi lần enroll tạo **một người mới**, kể cả trùng tên. Muốn thêm ảnh cho người cũ: xoá rồi enroll lại (chưa có endpoint thêm ảnh).
+Mỗi lần enroll tạo **một người mới**, kể cả trùng tên. Muốn thêm ảnh cho người đã có: dùng endpoint dưới.
+
+## POST /api/persons/{id}/images
+
+`multipart/form-data`, 1..10 file ở field `image`, mỗi ảnh đúng 1 khuôn mặt. Giới hạn kích thước giống enroll.
+
+```bash
+curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
+     -F "image=@an3.jpg" -F "image=@an4.jpg" \
+     "$XPERIA_FACE_URL/api/persons/1/images"
+```
+
+`200` (có ít nhất 1 ảnh được thêm; `num_images` của người tăng tương ứng) hoặc `422` (không ảnh nào có đúng 1 mặt, không lưu gì):
+
+```json
+{"person_id": 1, "name": "An", "images_accepted": 2, "images_rejected": []}
+```
+
+Lỗi khác: `400 invalid_id`, `404 not_found`, `400 missing_image`, `400 too_many_images`, `400 invalid_image`, `413`, `415`, `401`.
 
 ## GET /api/persons
 
