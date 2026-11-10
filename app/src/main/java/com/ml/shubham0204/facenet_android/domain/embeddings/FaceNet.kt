@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.core.graphics.scale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Single
 import org.pytorch.executorch.EValue
@@ -22,6 +24,10 @@ class FaceNet(val context: Context) {
 
     private var module: Module
 
+    // ExecuTorch Module thread-safety is not documented; the camera screen and the
+    // REST API may call this concurrently, so inference is serialized.
+    private val inferenceMutex = Mutex()
+
     /**
      * NOTE:
      * Download the model from here:
@@ -37,7 +43,8 @@ class FaceNet(val context: Context) {
     // Gets an face embedding using FaceNet
     suspend fun getFaceEmbedding(image: Bitmap) =
         withContext(Dispatchers.Default) {
-            return@withContext runFaceNet(convertBitmapToBuffer(image))[0]
+            val input = convertBitmapToBuffer(image)
+            return@withContext inferenceMutex.withLock { runFaceNet(input)[0] }
         }
 
     // Run the FaceNet model

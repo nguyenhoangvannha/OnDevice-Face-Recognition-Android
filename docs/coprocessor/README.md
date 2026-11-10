@@ -26,7 +26,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | Bước | Nội dung | Trạng thái |
 | --- | --- | --- |
 | a | Docs scaffold + progress log | xong |
-| b | `FaceRecognitionEngine` tách khỏi CameraX, nhận `Bitmap`/`ByteArray` | chưa |
+| b | `FaceRecognitionEngine` tách khỏi CameraX, nhận `Bitmap`/`ByteArray` | xong |
 | c | Ktor CIO server: health/status/recognize/enroll/persons | chưa |
 | d | Foreground service, WakeLock, WifiLock, BootReceiver, quyền | chưa |
 | e | Màn hình Compose "Coprocessor Server" | chưa |
@@ -72,6 +72,34 @@ flowchart TD
    của camera `*_private` chỉ đi luồng riêng (Telegram riêng), không vào nhóm gia đình.
 4. Chỉ đăng ký khuôn mặt của người trong nhà đã đồng ý. Không dùng cho hàng xóm hay nơi công cộng.
 5. Ngưỡng similarity cần hiệu chỉnh bằng ảnh camera thật (xem bên dưới).
+
+## Lõi nhận diện (`engine/`)
+
+Package `com.ml.shubham0204.facenet_android.engine`:
+
+| File | Vai trò |
+| --- | --- |
+| `FaceRecognitionEngine.kt` | `recognize(bitmap, threshold, withLiveness)`, `enroll(name, bitmaps)`, `listPersons()`, `deletePerson(id)`. Dùng lại `BaseFaceDetector` (ML Kit), `FaceNet` (ExecuTorch), `ImagesVectorDB`/`PersonDB` (ObjectBox), `FaceSpoofDetector` |
+| `ImageDecoding.kt` | `ByteArray` → `Bitmap` ARGB_8888, xoay theo EXIF, subsample để cạnh dài ≤ 1920 px; trả `null` nếu không phải ảnh |
+| `SimilarityMath.kt` | Cosine similarity, so ngưỡng (bao gồm bằng), tìm láng giềng gần nhất. Không phụ thuộc Android, có unit test |
+| `RecognitionModels.kt` | Kiểu kết quả không phụ thuộc Android (`FaceBox` thay cho `android.graphics.Rect`) để test lớp REST trên JVM |
+
+Hành vi:
+
+- Nhận diện dùng ML Kit chế độ **accurate** (camera trực tiếp vẫn dùng chế độ fast) và tìm kiếm **tuyến tính chính xác**
+  (`flatSearch = true`) vì DB gia đình nhỏ.
+- Mặt chạm mép ảnh bị bỏ qua (giữ nguyên `validateRect` của upstream).
+- `name`/`person_id` chỉ có khi `similarity >= threshold`; `similarity` luôn là điểm của láng giềng gần nhất.
+- Enroll: mỗi ảnh phải có đúng 1 khuôn mặt; người chỉ được lưu khi có ít nhất 1 ảnh hợp lệ.
+- Liveness (anti-spoof) tắt mặc định: model MiniFASNet huấn luyện cho ảnh selfie, hiệu quả trên ảnh CCTV **chưa kiểm chứng**.
+
+Thay đổi trên code upstream (camera UI vẫn chạy như cũ):
+
+- `BaseFaceDetector`: thêm `getCroppedFace(Bitmap)`; `getAllCroppedFaces` thêm tham số `highAccuracy = false`.
+- `FaceNet` và `FaceSpoofDetector`: khoá `Mutex` quanh suy luận, vì camera và API có thể chạy đồng thời
+  (tính thread-safe của ExecuTorch `Module` không được tài liệu hoá; `Interpreter` của LiteRT không thread-safe).
+- `ImagesVectorDB`: sửa lỗi `chunked(0)` khi < 4 bản ghi; thêm `count()`. `PersonDB`: thêm `get(id)`, `getAllOnce()`.
+- `ImageVectorUseCase` dùng chung `SimilarityMath.cosineSimilarity` (ngưỡng camera vẫn `> 0.3` như upstream).
 
 ## Stack thực tế của repo (khảo sát 2026-11-10, commit gốc `f6405d0`)
 

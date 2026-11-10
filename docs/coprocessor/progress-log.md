@@ -16,3 +16,13 @@ Mỗi bước: code, build (`bash ./gradlew assembleDebug`), unit test nếu có
 - Thêm `docs/coprocessor/` (README, api, build-and-run, configuration-and-security, testing, progress-log).
 - `.gitignore`: bỏ qua `app/src/main/assets/model.pte` (file tải lúc build, không commit).
 - Các tài liệu mô tả thiết kế mục tiêu; phần nào chưa có code được đánh dấu "chưa".
+
+Commit: `f384910 docs(coprocessor): add design docs, repo survey and progress log`.
+
+## 2026-11-10 — Bước b: FaceRecognitionEngine
+
+- Thêm package `engine/` (xem [README.md](README.md#lõi-nhận-diện-engine)).
+- Sửa lỗi upstream `flatSearch` với DB < 4 bản ghi; thêm khoá suy luận cho FaceNet/anti-spoof.
+- Thêm `testImplementation("junit:junit:4.13.2")` và `SimilarityMathTest` (8 test).
+- `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**, 8/8 test qua.
+- Chưa chạy trên máy thật.

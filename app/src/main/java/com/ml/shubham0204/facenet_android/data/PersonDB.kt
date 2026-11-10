@@ -17,6 +17,10 @@ class PersonDB {
         personBox.removeByIds(listOf(personID))
     }
 
+    fun get(personID: Long): PersonRecord? = personBox.get(personID)
+
+    fun getAllOnce(): List<PersonRecord> = personBox.all
+
     // Returns the number of records present in the collection
     fun getCount(): Long = personBox.count()
 

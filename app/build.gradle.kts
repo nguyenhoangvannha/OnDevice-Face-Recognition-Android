@@ -117,6 +117,9 @@ dependencies {
     // MLKit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.7")
 
+    // JVM unit tests
+    testImplementation("junit:junit:4.13.2")
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

@@ -2,6 +2,17 @@
 
 Trạng thái: **khung**, cập nhật theo từng bước.
 
+## Unit test (JVM)
+
+```bash
+bash ./gradlew testDebugUnitTest
+# báo cáo: app/build/reports/tests/testDebugUnitTest/index.html
+```
+
+| Test | Phạm vi |
+| --- | --- |
+| `engine/SimilarityMathTest` | cosine similarity, vector 0/rỗng, khác kích thước, ngưỡng bao gồm bằng, NaN, láng giềng gần nhất |
+
 ## Tiêu chí nghiệm thu (từ kế hoạch, tất cả **chưa kiểm chứng** trên máy thật)
 
 | Hạng mục | Điều kiện đạt |

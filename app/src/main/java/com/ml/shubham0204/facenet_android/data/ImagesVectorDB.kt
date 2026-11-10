@@ -1,5 +1,6 @@
 package com.ml.shubham0204.facenet_android.data
 
+import com.ml.shubham0204.facenet_android.engine.SimilarityMath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -22,8 +23,11 @@ class ImagesVectorDB {
         // and performs a linear-search to precisely compute the nearest neighbors
         if (flatSearch) {
             val allRecords = imagesBox.all
+            if (allRecords.isEmpty()) return null
             val numThreads = 4
-            val batchSize = allRecords.size / numThreads
+            // Upstream used `size / numThreads`, which is 0 (and makes chunked() throw)
+            // when there are fewer than 4 records.
+            val batchSize = maxOf(1, (allRecords.size + numThreads - 1) / numThreads)
             val batches = allRecords.chunked(batchSize)
             val results =
                 runBlocking {
@@ -33,7 +37,7 @@ class ImagesVectorDB {
                                 var bestMatch: FaceImageRecord? = null
                                 var bestDistance = Float.NEGATIVE_INFINITY
                                 for (record in batch) {
-                                    val distance = cosineDistance(embedding, record.faceEmbedding)
+                                    val distance = SimilarityMath.cosineSimilarity(embedding, record.faceEmbedding)
                                     if (distance > bestDistance) {
                                         bestDistance = distance
                                         bestMatch = record
@@ -60,22 +64,8 @@ class ImagesVectorDB {
             .firstOrNull()
     }
 
-    private fun cosineDistance(
-        x1: FloatArray,
-        x2: FloatArray,
-    ): Float {
-        var mag1 = 0.0f
-        var mag2 = 0.0f
-        var product = 0.0f
-        for (i in x1.indices) {
-            mag1 += x1[i] * x1[i]
-            mag2 += x2[i] * x2[i]
-            product += x1[i] * x2[i]
-        }
-        mag1 = kotlin.math.sqrt(mag1)
-        mag2 = kotlin.math.sqrt(mag2)
-        return product / (mag1 * mag2)
-    }
+
+    fun count(): Long = imagesBox.count()
 
     fun removeFaceRecordsWithPersonID(personID: Long) {
         imagesBox.removeByIds(

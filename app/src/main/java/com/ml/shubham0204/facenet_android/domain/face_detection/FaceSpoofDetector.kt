@@ -7,6 +7,8 @@ import android.graphics.Rect
 import androidx.core.graphics.get
 import androidx.core.graphics.set
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Single
 import org.tensorflow.lite.DataType
@@ -50,6 +52,9 @@ class FaceSpoofDetector(
     private val scale2 = 4.0f
     private val inputImageDim = 80
     private val outputDim = 3
+
+    // LiteRT Interpreter instances are not thread-safe (camera + REST API)
+    private val interpreterMutex = Mutex()
 
     private var firstModelInterpreter: Interpreter
     private var secondModelInterpreter: Interpreter
@@ -138,9 +143,11 @@ class FaceSpoofDetector(
             val output2 = arrayOf(FloatArray(outputDim))
 
             val time =
-                measureTime {
-                    firstModelInterpreter.run(input1, output1)
-                    secondModelInterpreter.run(input2, output2)
+                interpreterMutex.withLock {
+                    measureTime {
+                        firstModelInterpreter.run(input1, output1)
+                        secondModelInterpreter.run(input2, output2)
+                    }
                 }.toLong(DurationUnit.MILLISECONDS)
 
             val output =
