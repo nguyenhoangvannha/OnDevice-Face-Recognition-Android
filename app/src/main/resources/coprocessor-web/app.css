@@ -1,0 +1,20 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { max-width: 960px; margin: 0 auto; padding: 12px; }
+h1 { margin-bottom: 4px; }
+section { border: 1px solid #8884; border-radius: 8px; padding: 8px 14px; margin: 12px 0; }
+form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+input[type=password], input[type=number], input:not([type]), select { padding: 6px; min-width: 12em; }
+#token { flex: 1; font-family: ui-monospace, monospace; }
+button { padding: 6px 12px; cursor: pointer; }
+.muted { color: #888; }
+.error { color: #e5484d; }
+.ok { color: #1db954; }
+canvas { max-width: 100%; height: auto; display: block; margin-top: 8px; }
+pre { overflow: auto; max-height: 320px; font-size: 12px; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #8883; }
+dl { display: grid; grid-template-columns: max-content auto; gap: 2px 16px; }
+dt { color: #888; }
+dd { margin: 0; }
+
+label.option { display: block; margin: 0.25rem 0; }

@@ -2,7 +2,27 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
     id("com.google.devtools.ksp")
+}
+
+// Release signing comes only from the environment (GitHub Actions secrets), never from git.
+// Without it, assembleRelease produces an unsigned APK and debug builds are unaffected.
+// REQUIRE_RELEASE_SIGNING=true (set by the release workflow) turns missing signing into an error.
+// See docs/coprocessor/ci-and-release.md.
+val releaseKeystoreFile: File =
+    System.getenv("RELEASE_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) }
+        ?: rootProject.file("keystore.jks")
+val releaseSigningEnv =
+    listOf("RELEASE_KEYSTORE_PASSWORD", "RELEASE_KEYSTORE_ALIAS", "RELEASE_KEY_PASSWORD")
+        .associateWith { System.getenv(it).orEmpty() }
+val hasReleaseSigning = releaseKeystoreFile.isFile && releaseSigningEnv.values.all { it.isNotEmpty() }
+if (System.getenv("REQUIRE_RELEASE_SIGNING") == "true" && !hasReleaseSigning) {
+    throw GradleException(
+        "Release signing required but missing: keystore file " +
+            (if (releaseKeystoreFile.isFile) "found" else "not found") + ", empty variables: " +
+            releaseSigningEnv.filterValues { it.isEmpty() }.keys,
+    )
 }
 
 android {
@@ -23,11 +43,13 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file("../keystore.jks")
-            storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("RELEASE_KEYSTORE_ALIAS")
-            keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseSigningEnv.getValue("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningEnv.getValue("RELEASE_KEYSTORE_ALIAS")
+                keyPassword = releaseSigningEnv.getValue("RELEASE_KEY_PASSWORD")
+            }
         }
     }
 
@@ -38,7 +60,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else null
         }
     }
     compileOptions {
@@ -92,8 +114,9 @@ dependencies {
     implementation(libs.koin.androidx.compose)
     ksp(libs.koin.ksp.compiler)
 
-    // ExecuTorch
-    implementation("org.pytorch:executorch-android:1.2.0")
+    // ExecuTorch with XNNPACK (CPU) + Vulkan (GPU) delegates. Same Java API as executorch-android;
+    // backend AARs cannot be combined (duplicate classes), so QNN would need a custom AAR.
+    implementation("org.pytorch:executorch-android-vulkan:1.2.0")
 
     // LiteRT
     implementation(libs.tensorflow.lite)
@@ -116,6 +139,18 @@ dependencies {
 
     // MLKit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.7")
+
+    // Ktor embedded server (coprocessor REST API)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.status.pages)
+
+    // JVM unit tests
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.ktor.server.test.host)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

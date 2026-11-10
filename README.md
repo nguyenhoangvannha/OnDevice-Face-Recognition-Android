@@ -1,3 +1,7 @@
+> **Fork note (`feature/rest-api-coprocessor`):** this fork adds an on-device REST API (Ktor) running in a
+> foreground service, so a home NVR can send snapshots to the phone for offline face recognition.
+> See [docs/coprocessor/README.md](docs/coprocessor/README.md).
+
 # On-Device Face Recognition In Android 
 
 > A simple Android app that performs on-device face recognition by comparing FaceNet embeddings against a vector database of user-given faces

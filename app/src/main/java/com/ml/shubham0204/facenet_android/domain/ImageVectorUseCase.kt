@@ -9,9 +9,8 @@ import com.ml.shubham0204.facenet_android.data.RecognitionMetrics
 import com.ml.shubham0204.facenet_android.domain.embeddings.FaceNet
 import com.ml.shubham0204.facenet_android.domain.face_detection.BaseFaceDetector
 import com.ml.shubham0204.facenet_android.domain.face_detection.FaceSpoofDetector
+import com.ml.shubham0204.facenet_android.engine.SimilarityMath
 import org.koin.core.annotation.Single
-import kotlin.math.pow
-import kotlin.math.sqrt
 import kotlin.time.DurationUnit
 import kotlin.time.measureTimedValue
 
@@ -86,7 +85,7 @@ class ImageVectorUseCase(
 
             // Calculate cosine similarity between the nearest-neighbor
             // and the query embedding
-            val distance = cosineDistance(embedding, recognitionResult.faceEmbedding)
+            val distance = SimilarityMath.cosineSimilarity(embedding, recognitionResult.faceEmbedding)
             // If the distance > 0.4, we recognize the person
             // else we conclude that the face does not match enough
             if (distance > 0.3) {
@@ -114,22 +113,6 @@ class ImageVectorUseCase(
         return Pair(metrics, faceRecognitionResults)
     }
 
-    private fun cosineDistance(
-        x1: FloatArray,
-        x2: FloatArray,
-    ): Float {
-        var mag1 = 0.0f
-        var mag2 = 0.0f
-        var product = 0.0f
-        for (i in x1.indices) {
-            mag1 += x1[i].pow(2)
-            mag2 += x2[i].pow(2)
-            product += x1[i] * x2[i]
-        }
-        mag1 = sqrt(mag1)
-        mag2 = sqrt(mag2)
-        return product / (mag1 * mag2)
-    }
 
     fun removeImages(personID: Long) {
         imagesVectorDB.removeFaceRecordsWithPersonID(personID)

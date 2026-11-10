@@ -1,0 +1,11 @@
+# Pinned for a reproducible FaceNet -> ExecuTorch export (tested 2026-11-10, macOS arm64, Python 3.12).
+# ExecuTorch Python must match the Android runtime (org.pytorch:executorch-android-vulkan:1.2.0).
+executorch==1.2.0
+torch==2.11.0
+torchvision==0.26.0
+torchao==0.17.0
+numpy==2.5.4
+pillow==13.0.0
+pyarrow==22.0.0
+# facenet-pytorch 2.6.0 pins torch<2.3; install it with --no-deps (see setup.sh). Only its
+# InceptionResnetV1 module is used.

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,7 +59,10 @@ private lateinit var cameraPermissionLauncher: ManagedActivityResultLauncher<Str
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetectScreen(onOpenFaceListClick: (() -> Unit)) {
+fun DetectScreen(
+    onOpenFaceListClick: (() -> Unit),
+    onOpenCoprocessorClick: (() -> Unit),
+) {
     val viewModel: DetectScreenViewModel = koinViewModel()
     FaceNetAndroidTheme {
         Scaffold(
@@ -73,6 +77,12 @@ fun DetectScreen(onOpenFaceListClick: (() -> Unit)) {
                         )
                     },
                     actions = {
+                        IconButton(onClick = onOpenCoprocessorClick) {
+                            Icon(
+                                imageVector = Icons.Default.Dns,
+                                contentDescription = "Open Coprocessor Server",
+                            )
+                        }
                         IconButton(onClick = onOpenFaceListClick) {
                             Icon(
                                 imageVector = Icons.Default.Face,

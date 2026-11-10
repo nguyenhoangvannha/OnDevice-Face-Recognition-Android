@@ -33,7 +33,11 @@ class MLKitFaceDetector(
                 getBitmapFromUri(context, imageUri) ?: return@withContext Result.failure<Bitmap>(
                     AppException(ErrorCode.FACE_DETECTOR_FAILURE),
                 )
+            getCroppedFace(imageBitmap)
+        }
 
+    override suspend fun getCroppedFace(imageBitmap: Bitmap): Result<Bitmap> =
+        withContext(Dispatchers.IO) {
             // We need exactly one face in the image, in other cases, return the
             // necessary errors
             val faces = Tasks.await(highAccuracyFaceDetector.process(InputImage.fromBitmap(imageBitmap, 0)))
@@ -63,11 +67,15 @@ class MLKitFaceDetector(
             }
         }
 
-    override suspend fun getAllCroppedFaces(frameBitmap: Bitmap): List<Pair<Bitmap, Rect>> =
+    override suspend fun getAllCroppedFaces(
+        frameBitmap: Bitmap,
+        highAccuracy: Boolean,
+    ): List<Pair<Bitmap, Rect>> =
         withContext(
             Dispatchers.IO
         ) {
-            return@withContext Tasks.await(realTimeFaceDetector.process(
+            val detector = if (highAccuracy) highAccuracyFaceDetector else realTimeFaceDetector
+            return@withContext Tasks.await(detector.process(
                 InputImage.fromBitmap(
                     frameBitmap,
                     0

@@ -13,7 +13,14 @@ import java.io.FileOutputStream
 abstract class BaseFaceDetector {
     abstract suspend fun getCroppedFace(imageUri: Uri): Result<Bitmap>
 
-    abstract suspend fun getAllCroppedFaces(frameBitmap: Bitmap): List<Pair<Bitmap, Rect>>
+    // Crops exactly one face from an already-decoded image (used by the REST API enroll path)
+    abstract suspend fun getCroppedFace(imageBitmap: Bitmap): Result<Bitmap>
+
+    // `highAccuracy` trades speed for recall; the live camera keeps the fast mode
+    abstract suspend fun getAllCroppedFaces(
+        frameBitmap: Bitmap,
+        highAccuracy: Boolean = false,
+    ): List<Pair<Bitmap, Rect>>
 
     protected fun getBitmapFromUri(context: Context, imageUri: Uri): Bitmap? {
         var imageInputStream =
