@@ -30,7 +30,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | c | Ktor CIO server: health/status/recognize/enroll/persons | xong (code + test JVM; server được khởi động ở bước d) |
 | d | Foreground service, WakeLock, WifiLock, BootReceiver, quyền | xong (build + test JVM; chưa chạy trên máy thật) |
 | e | Màn hình Compose "Coprocessor Server" | xong (build; chưa xem trên máy thật) |
-| f | Client Python mẫu | chưa |
+| f | Client Python mẫu | xong (test với server giả; chưa gọi điện thoại thật) |
 
 Chi tiết từng bước và commit: [progress-log.md](progress-log.md).
 

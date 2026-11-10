@@ -19,6 +19,29 @@ bash ./gradlew testDebugUnitTest
 
 Test REST chạy với backend giả, nên **không** kiểm model thật, ML Kit hay ObjectBox.
 
+## Client Python
+
+```bash
+cd clients/python && python3 -m unittest -v test_xperia_face_client
+```
+
+7 test với server HTTP giả: bắt buộc biến môi trường, `repr` không lộ token, multipart recognize/enroll, lỗi 401/404,
+`recognize_snapshot` trả `None` khi timeout hoặc không kết nối được.
+
+## Kiểm thử trên máy thật (chưa làm)
+
+```bash
+export XPERIA_FACE_URL=http://<ip-điện-thoại>:8080 XPERIA_FACE_TOKEN=...
+curl -s "$XPERIA_FACE_URL/api/health"                                         # 200, không cần token
+curl -s -o /dev/null -w '%{http_code}\n' "$XPERIA_FACE_URL/api/status"         # 401
+python3 clients/python/xperia_face_client.py status
+python3 clients/python/xperia_face_client.py enroll "An" an1.jpg an2.jpg
+time python3 clients/python/xperia_face_client.py recognize snapshot.jpg       # so inference_ms và tổng thời gian
+```
+
+Kiểm 24/7: tắt màn hình, gọi `/api/health` mỗi phút trong 72 giờ, ghi lại `/api/status` (nhiệt độ pin, thermal status).
+Kiểm reboot: khởi động lại điện thoại, không mở app, gọi `/api/health`.
+
 ## Tiêu chí nghiệm thu (từ kế hoạch, tất cả **chưa kiểm chứng** trên máy thật)
 
 | Hạng mục | Điều kiện đạt |

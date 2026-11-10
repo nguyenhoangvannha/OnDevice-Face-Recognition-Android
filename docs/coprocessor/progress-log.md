@@ -62,3 +62,21 @@ Commit: `bcd6ffe feat(service): run the API in a specialUse foreground service`.
 - `CoprocessorViewModel` (`@KoinViewModel`): KSP sinh binding cho `CoprocessorViewModel`, `AndroidCoprocessorBackend`,
   `CoprocessorSettings`, `FaceRecognitionEngine` (đã kiểm tra trong `build/generated/ksp`).
 - `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**; 19/19 test qua. Chưa có UI test; chưa xem trên máy thật.
+
+Commit: `264a040 feat(ui): add Coprocessor Server dashboard`.
+
+## 2026-11-10 — Bước f: client Python
+
+- Thêm `clients/python/xperia_face_client.py` (stdlib, Python 3.7+), `test_xperia_face_client.py`, `README.md`.
+- URL/token/timeout lấy từ `XPERIA_FACE_URL`, `XPERIA_FACE_TOKEN`, `XPERIA_FACE_TIMEOUT`; không có secret trong code; `repr()` không lộ token.
+- `recognize_snapshot()` trả `None` khi timeout/mất mạng/lỗi API (thay cho kế hoạch dùng `requests` và IP/token hardcode).
+- `python3 -m unittest -v test_xperia_face_client` trên Mac (Python 3.13.6): 7/7 qua. Chưa chạy trên Python 3.7 hay trên Armbian.
+- Thêm ghi chú fork ở đầu `README.md` gốc.
+
+## Còn lại (chưa làm)
+
+- Cài APK lên Xperia, bật server, đo độ trễ, nhiệt độ, chạy 72 giờ, thử reboot (cần anh; lượt này không đụng điện thoại).
+- Hiệu chỉnh ngưỡng bằng ảnh camera thật.
+- Tích hợp phía homelab (notifier/Frigate trên Mac Mini hoặc Armbian Phố): chưa làm, cần anh chọn.
+- Quyết định có loại DB ObjectBox (embedding khuôn mặt) khỏi Android backup không.
+- Chưa có endpoint thêm ảnh cho người đã có; chưa có UI test.
