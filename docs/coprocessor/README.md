@@ -43,6 +43,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | 3.1 | Chạy tay release tự tạo tag (prerelease) | xong |
 | 3.2 | Keystore + 4 secret GitHub | xong (bản gốc ở `~/.secrets/face-coprocessor/` trên MacBook) |
 | 3.3 | Chọn backend CPU/GPU/NPU + export model | CPU, GPU xong (chưa chạy trên máy thật); NPU chưa có (cần anh chấp nhận licence QNN SDK) |
+| 4.1 | APK release chỉ arm64-v8a (152.7 MB thay vì 224.6 MB), universal tuỳ chọn | xong (build + CI; chưa cài trên máy thật) |
 
 Chi tiết từng bước và commit: [progress-log.md](progress-log.md).
 

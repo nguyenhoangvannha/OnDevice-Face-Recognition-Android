@@ -161,3 +161,16 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
 - CI push của `b93ba73` đỏ: `BackendControllerTest.requestedGpuIsRestoredOnStartup` có race (GPU nền xong trước khi test kịp kiểm
   "CPU trước"). Lỗi ở test, không phải ở app. Sửa bằng cổng `CompletableDeferred` giữ việc lấy model GPU; chạy lại 3 lần đều qua.
 
+
+## 2026-11-10 — Vòng 4: APK release chỉ arm64-v8a
+
+- `main` fast-forward tới `25fd0f5` (anh merge PR #1); nhánh mới `feature/arm64-apk`.
+- `release` có `ndk { abiFilters += "arm64-v8a" }`; `-PuniversalRelease=true` cho bản mọi ABI. Debug không lọc (emulator x86_64).
+- Đo thật (chưa ký): release 224,606,207 → **152,685,682** byte (−32%). Universal = bằng bản cũ. Debug 259,113,794 (không đổi).
+  `aapt2`: `native-code: 'arm64-v8a'`; `lib/` có đủ 8 thư viện arm64 (ExecuTorch Vulkan, LiteRT + GPU, ObjectBox, ML Kit, CameraX, fbjni, libc++).
+- Ký thử bằng khoá dùng một lần: 152,702,066 byte, `apksigner verify` qua.
+- `release.yml`: asset chính `FaceNet-Coprocessor-<tag>-arm64-v8a.apk` + `.sha256`, kiểm `native-code`; ô `universal`
+  (chạy tay) đính kèm thêm `-universal.apk`. actionlint sạch.
+- Đã xem, không làm: `noCompress` cho `model.pte` (APK +6.8 MB, app copy ra `filesDir` nên không lợi), R8 (cần keep rule cho
+  Koin/Ktor/ObjectBox/JNI, chưa thử được trên máy thật), tài nguyên (~0.3 MB).
+- Chưa: cài bản arm64 lên Xperia; chưa chạy release trên GitHub (không tạo tag theo yêu cầu).

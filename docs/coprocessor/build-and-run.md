@@ -15,6 +15,9 @@ bash ./gradlew testDebugUnitTest      # unit test JVM
   `app/src/main/assets/` (đã gitignore).
 - APK: `app/build/outputs/apk/debug/app-debug.apk`.
 - Release đã ký: xem [ci-and-release.md](ci-and-release.md). `assembleRelease` không có biến ký → APK chưa ký.
+- `assembleRelease` chỉ chứa thư viện `arm64-v8a` (~153 MB thay vì ~225 MB). Cần bản cho mọi ABI:
+  `bash ./gradlew assembleRelease -PuniversalRelease=true`. Bản debug luôn đủ ABI (chạy được trên emulator x86_64).
+- Trên GitHub Release, tải `FaceNet-Coprocessor-<tag>-arm64-v8a.apk` cho Xperia.
 
 ## Cài và bật trên Xperia (chưa làm, cần anh)
 
