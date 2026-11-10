@@ -91,3 +91,14 @@ Commit: `745d416 feat(client): add stdlib Python client for the coprocessor API`
 - `FaceRecognitionEngine.addImages()` dùng chung bước "1 mặt / ảnh → embedding" với enroll; cập nhật `num_images` của người.
 - Client Python: `add_images()` + lệnh `add-images`.
 - `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**, 20/20 test; client Python 8/8.
+
+Commit: `1704c6f feat(api): add POST /api/persons/{id}/images`.
+
+## 2026-11-10 — Bước 2: trang web thử nghiệm + API ngưỡng
+
+- Thêm `app/src/main/resources/coprocessor-web/` (HTML/JS/CSS thuần, ~14 KB) và `WebAssets.kt`; route `/`, `/app.js`, `/app.css`.
+- Thêm `GET`/`PUT /api/settings/threshold` (bearer). Dashboard đọc lại ngưỡng mỗi 5 s (trừ lúc đang kéo slider) để thấy thay đổi từ web.
+- Header bảo mật trên mọi response; không CORS. Dashboard ghi chú mở địa chỉ trong trình duyệt.
+- Kiểm tra APK debug có `coprocessor-web/{index.html,app.js,app.css}`.
+- `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**, 23/23 test. `node --check app.js` qua.
+- Chưa mở trang trong trình duyệt thật (cần server chạy trên điện thoại).

@@ -9,16 +9,20 @@ Test: `app/src/test/.../coprocessor/server/FaceApiModuleTest.kt` (chạy trên J
 - Xác thực: `Authorization: Bearer <token>` cho mọi endpoint trừ `/api/health`. Sai/thiếu token → `401`
   (header `WWW-Authenticate: Bearer realm="facenet-coprocessor"`, body rỗng).
 - JSON snake_case. Lỗi có dạng `{"error": "<mã>", "message": "<mô tả>"}`.
-- Không cài CORS: không có client trình duyệt.
+- Không cài CORS: trang web thử nghiệm cùng origin với API.
+- Mọi response có `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer` (chi tiết: [web-test-page.md](web-test-page.md#bảo-mật)).
 
 | Method | Path | Token | Mô tả |
 | --- | --- | --- | --- |
+| GET | `/`, `/app.js`, `/app.css` | không | Trang web thử nghiệm ([web-test-page.md](web-test-page.md)) |
 | GET | `/api/health` | không | Sống hay chết; không lộ thông tin máy |
 | GET | `/api/status` | có | Pin, nhiệt độ pin, thermal status, heap, số người, ngưỡng, uptime |
 | POST | `/api/recognize` | có | Nhận diện mọi khuôn mặt trong 1 ảnh |
 | POST | `/api/enroll` | có | Đăng ký người mới: `name` + 1..10 ảnh |
 | POST | `/api/persons/{id}/images` | có | Thêm 1..10 ảnh cho người đã có |
 | GET | `/api/persons` | có | Danh sách người đã đăng ký |
+| GET / PUT | `/api/settings/threshold` | có | Đọc / đặt ngưỡng cosine (lưu cùng chỗ với slider trong app) |
 | DELETE | `/api/persons/{id}` | có | Xoá người và mọi embedding của họ |
 
 ## Giới hạn
@@ -141,3 +145,17 @@ Lỗi khác: `400 invalid_id`, `404 not_found`, `400 missing_image`, `400 too_ma
 ## DELETE /api/persons/{id}
 
 `200 {"deleted": 1}`, `404 not_found`, `400 invalid_id`.
+
+## GET / PUT /api/settings/threshold
+
+```bash
+curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" "$XPERIA_FACE_URL/api/settings/threshold"
+# {"threshold": 0.7}
+curl -s -X PUT -H "Authorization: Bearer $XPERIA_FACE_TOKEN" -H "Content-Type: application/json" \
+     -d '{"threshold": 0.65}' "$XPERIA_FACE_URL/api/settings/threshold"
+# {"threshold": 0.65}
+```
+
+- Giá trị 0..1 (kể cả 0 và 1). Ngoài khoảng, thiếu trường, hay JSON hỏng → `400 invalid_threshold`. Body > 4 KiB → `413`.
+- Lưu vào `CoprocessorSettings` (SharedPreferences), có hiệu lực ngay cho request sau. Slider trong app cho phép
+  0.30–0.95; giá trị đặt qua API ngoài khoảng đó vẫn được lưu, slider chỉ hiển thị kẹp trong khoảng.

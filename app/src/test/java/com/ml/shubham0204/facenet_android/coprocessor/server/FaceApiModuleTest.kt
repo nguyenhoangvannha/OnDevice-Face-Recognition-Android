@@ -13,7 +13,9 @@ import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.options
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -79,6 +81,15 @@ private class FakeBackend : CoprocessorBackend {
     override suspend fun listPersons(): List<PersonSummary> = persons.values.toList()
 
     override suspend fun deletePerson(personId: Long): Boolean = persons.remove(personId) != null
+
+    var storedThreshold = 0.7f
+
+    override fun getThreshold(): Float = storedThreshold
+
+    override fun setThreshold(value: Float): Float {
+        storedThreshold = value
+        return storedThreshold
+    }
 
     override suspend fun status(): StatusResponse = StatusResponse(80, 31.5f, true, "none", 40, 256, true, 1, 2, 0.7f, 5, 9, 33)
 }
@@ -233,6 +244,66 @@ class FaceApiModuleTest {
             assertEquals(HttpStatusCode.OK, ok.status)
             assertEquals(2, ok.json()["images_accepted"]!!.jsonPrimitive.int)
             assertEquals(4L, backend.persons[1]!!.numImages)
+        }
+
+    @Test
+    fun thresholdApi() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/api/settings/threshold").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.put("/api/settings/threshold") { contentType(ContentType.Application.Json); setBody("{\"threshold\":0.5}") }.status)
+            assertEquals("0.7", client.get("/api/settings/threshold") { auth() }.json()["threshold"]!!.jsonPrimitive.content)
+
+            val ok = client.put("/api/settings/threshold") { auth(); contentType(ContentType.Application.Json); setBody("{\"threshold\":0.65}") }
+            assertEquals(HttpStatusCode.OK, ok.status)
+            assertEquals(0.65f, backend.storedThreshold, 1e-6f)
+
+            for (bad in listOf("{\"threshold\":1.5}", "{\"threshold\":-0.1}", "{}", "not json")) {
+                val res = client.put("/api/settings/threshold") { auth(); contentType(ContentType.Application.Json); setBody(bad) }
+                assertEquals(bad, HttpStatusCode.BadRequest, res.status)
+            }
+            assertEquals(0.65f, backend.storedThreshold, 1e-6f)
+        }
+
+    @Test
+    fun webPageIsServedWithoutTokenAndWithSecurityHeaders() =
+        api {
+            val page = client.get("/")
+            assertEquals(HttpStatusCode.OK, page.status)
+            assertTrue(page.contentType()!!.match(ContentType.Text.Html))
+            val html = page.bodyAsText()
+            assertTrue(html.contains("<script src=\"/app.js\"></script>"))
+            assertFalse("no external URLs", Regex("(src|href)=\"(https?:)?//").containsMatchIn(html))
+            assertTrue(page.headers["Content-Security-Policy"]!!.startsWith("default-src 'self'"))
+            assertEquals("nosniff", page.headers["X-Content-Type-Options"])
+
+            val js = client.get("/app.js")
+            assertEquals(HttpStatusCode.OK, js.status)
+            assertTrue(js.contentType()!!.match(ContentType.Text.JavaScript))
+            assertTrue(js.bodyAsText().contains("sessionStorage"))
+            assertTrue(client.get("/app.css").contentType()!!.match(ContentType.Text.CSS))
+
+            assertEquals(HttpStatusCode.NotFound, client.get("/index.html").status)
+            assertEquals(HttpStatusCode.NotFound, client.get("/../build.gradle.kts").status)
+        }
+
+    @Test
+    fun noCorsHeadersEvenWithOrigin() =
+        api {
+            val res =
+                client.get("/api/persons") {
+                    header(HttpHeaders.Authorization, "Bearer $TOKEN")
+                    header(HttpHeaders.Origin, "http://evil.example")
+                }
+            assertEquals(HttpStatusCode.OK, res.status)
+            assertEquals(null, res.headers[HttpHeaders.AccessControlAllowOrigin])
+            assertEquals("nosniff", res.headers["X-Content-Type-Options"])
+            val preflight =
+                client.options("/api/recognize") {
+                    header(HttpHeaders.Origin, "http://evil.example")
+                    header(HttpHeaders.AccessControlRequestMethod, "POST")
+                }
+            assertEquals(null, preflight.headers[HttpHeaders.AccessControlAllowOrigin])
         }
 
     @Test

@@ -62,6 +62,13 @@ class AndroidCoprocessorBackend(
 
     override suspend fun deletePerson(personId: Long): Boolean = withContext(Dispatchers.IO) { engine.deletePerson(personId) }
 
+    override fun getThreshold(): Float = settings.threshold
+
+    override fun setThreshold(value: Float): Float {
+        settings.threshold = value
+        return settings.threshold
+    }
+
     override suspend fun status(): StatusResponse =
         withContext(Dispatchers.IO) {
             val device = DeviceStatus.read(context)

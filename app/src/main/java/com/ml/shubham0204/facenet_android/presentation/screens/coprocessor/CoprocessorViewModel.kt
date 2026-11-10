@@ -45,18 +45,27 @@ class CoprocessorViewModel(
         addresses.value = DeviceStatus.ipv4Addresses()
         // The notification's Stop action changes this flag outside the UI.
         serverEnabled.value = settings.serverEnabled
+        // The web page can change the threshold too (PUT /api/settings/threshold).
+        if (!draggingThreshold) threshold.floatValue = settings.threshold
     }
+
+    private var draggingThreshold = false
 
     fun setServerEnabled(enabled: Boolean) {
         if (enabled) CoprocessorService.start(context, settings) else CoprocessorService.stop(context, settings)
         serverEnabled.value = enabled
     }
 
-    fun onThresholdChange(value: Float) {
+    fun onThresholdChange(
+        value: Float,
+        dragging: Boolean = false,
+    ) {
+        draggingThreshold = dragging
         threshold.floatValue = value
     }
 
     fun commitThreshold() {
+        draggingThreshold = false
         settings.threshold = threshold.floatValue
         threshold.floatValue = settings.threshold
     }

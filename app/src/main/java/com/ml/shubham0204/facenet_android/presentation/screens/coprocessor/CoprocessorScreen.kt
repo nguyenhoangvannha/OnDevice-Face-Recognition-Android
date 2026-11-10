@@ -162,6 +162,7 @@ private fun NetworkCard(viewModel: CoprocessorViewModel) {
             addresses.forEach {
                 Text("${it.interfaceName}: http://${it.address}:$port", fontFamily = FontFamily.Monospace)
             }
+            Text("Open that address in a browser on the same network for the test page.", style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -246,7 +247,7 @@ private fun ThresholdCard(viewModel: CoprocessorViewModel) {
         Text(String.format(Locale.US, "%.2f (cosine, API only)", threshold))
         Slider(
             value = threshold.coerceIn(THRESHOLD_MIN, THRESHOLD_MAX),
-            onValueChange = viewModel::onThresholdChange,
+            onValueChange = { viewModel.onThresholdChange(it, dragging = true) },
             onValueChangeFinished = viewModel::commitThreshold,
             valueRange = THRESHOLD_MIN..THRESHOLD_MAX,
         )

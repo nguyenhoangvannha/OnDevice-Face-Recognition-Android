@@ -32,4 +32,9 @@ interface CoprocessorBackend {
     suspend fun deletePerson(personId: Long): Boolean
 
     suspend fun status(): StatusResponse
+
+    fun getThreshold(): Float
+
+    /** Persists the threshold (same storage as the app slider) and returns the stored value. */
+    fun setThreshold(value: Float): Float
 }

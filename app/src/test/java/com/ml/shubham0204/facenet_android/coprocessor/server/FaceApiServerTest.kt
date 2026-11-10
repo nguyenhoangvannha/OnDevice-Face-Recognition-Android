@@ -24,6 +24,10 @@ class FaceApiServerTest {
         override suspend fun deletePerson(personId: Long): Boolean = false
 
         override suspend fun status(): StatusResponse = error("unused")
+
+        override fun getThreshold(): Float = 0.7f
+
+        override fun setThreshold(value: Float): Float = value
     }
 
     @Test

@@ -13,6 +13,7 @@ bash ./gradlew testDebugUnitTest
 | --- | --- |
 | `engine/SimilarityMathTest` | cosine similarity, vector 0/rỗng, khác kích thước, ngưỡng bao gồm bằng, NaN, láng giềng gần nhất |
 | `coprocessor/server/FaceApiModuleTest` | health không cần token và không lộ thông tin máy; 401 khi thiếu/sai token; recognize trả snake_case + ghi log; 400 thiếu ảnh / ảnh hỏng / ảnh rỗng; 413 quá cỡ; 415 không phải multipart; enroll 400/422/201; thêm ảnh 401/400/404/422/200; persons list; delete 400/404/200 |
+| `FaceApiModuleTest` (vòng 2) | API ngưỡng (401, đọc, đặt, 400 khi ngoài 0..1/JSON hỏng); trang web không cần token, đúng content-type, CSP/nosniff, không URL ngoài, 404 đường dẫn lạ; không có header CORS |
 | `coprocessor/server/FaceApiServerTest` | Ktor CIO thật trên cổng local: health 200, 401/200 theo token, stop; báo lỗi khi port bị chiếm |
 | `coprocessor/TokenUtilsTest` | token 43 ký tự URL-safe, ngẫu nhiên; so khớp, null, rỗng |
 | `coprocessor/CoprocessorStateHolderTest` | log giữ N request mới nhất, đếm tổng |

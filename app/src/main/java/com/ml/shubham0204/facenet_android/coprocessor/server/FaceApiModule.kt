@@ -26,6 +26,10 @@ import io.ktor.server.request.contentType
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.request.receiveMultipart
+import io.ktor.server.request.receiveText
+import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
+import io.ktor.server.routing.put
 import io.ktor.server.response.respond
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -38,6 +42,8 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
 const val AUTH_BEARER = "api-token"
+
+private const val MAX_JSON_BYTES = 4096L
 
 private val InferenceMsKey = AttributeKey<Long>("inference_ms")
 private val FaceCountKey = AttributeKey<Int>("face_count")
@@ -91,6 +97,7 @@ fun Application.faceApiModule(
 
     intercept(ApplicationCallPipeline.Monitoring) {
         val startNanos = System.nanoTime()
+        SecurityHeaders.apply(call)
         try {
             proceed()
         } finally {
@@ -113,6 +120,20 @@ fun Application.faceApiModule(
     routing {
         // Liveness probe only: no token, no device details.
         get("/api/health") { call.respond(HealthResponse()) }
+
+        // Built-in test page: static, no token needed to load it; every API call it makes
+        // sends the token the user pastes (kept in sessionStorage).
+        WebAssets.routes.forEach { (path, asset) ->
+            get(path) {
+                val bytes = WebAssets.load(asset)
+                if (bytes == null) {
+                    call.respond(HttpStatusCode.NotFound, ApiError("not_found", "Asset missing"))
+                } else {
+                    call.response.header(HttpHeaders.CacheControl, "no-cache")
+                    call.respondBytes(bytes, asset.contentType)
+                }
+            }
+        }
 
         authenticate(AUTH_BEARER) {
             get("/api/status") { call.respond(backend.status()) }
@@ -160,6 +181,24 @@ fun Application.faceApiModule(
                 }
                 val status = if (result.imagesAccepted > 0) HttpStatusCode.OK else HttpStatusCode.UnprocessableEntity
                 call.respond(status, result.toResponse())
+            }
+
+            get("/api/settings/threshold") { call.respond(ThresholdResponse(backend.getThreshold())) }
+
+            put("/api/settings/threshold") {
+                val declared = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                if (declared != null && declared > MAX_JSON_BYTES) throw PayloadTooLargeException(MAX_JSON_BYTES)
+                val value =
+                    try {
+                        ApiJson.decodeFromString(ThresholdRequest.serializer(), call.receiveText()).threshold
+                    } catch (e: IllegalArgumentException) { // includes SerializationException
+                        null
+                    }
+                if (value == null || value.isNaN() || value < 0f || value > 1f) {
+                    call.respond(HttpStatusCode.BadRequest, ApiError("invalid_threshold", "Send JSON {\"threshold\": <0..1>}"))
+                    return@put
+                }
+                call.respond(ThresholdResponse(backend.setThreshold(value)))
             }
 
             get("/api/persons") {

@@ -145,6 +145,16 @@ data class PersonsResponse(
 )
 
 @Serializable
+data class ThresholdResponse(
+    val threshold: Float,
+)
+
+@Serializable
+data class ThresholdRequest(
+    val threshold: Float,
+)
+
+@Serializable
 data class DeleteResponse(
     val deleted: Long,
 )

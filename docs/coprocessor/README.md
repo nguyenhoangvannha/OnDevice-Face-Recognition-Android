@@ -17,6 +17,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | [api.md](api.md) | Đặc tả REST API: endpoint, request/response, mã lỗi, giới hạn |
 | [build-and-run.md](build-and-run.md) | Build trên Mac, cài APK, bật server, cấu hình điện thoại |
 | [configuration-and-security.md](configuration-and-security.md) | Token, port, ngưỡng, foreground service, quyền, backup, quyền riêng tư |
+| [web-test-page.md](web-test-page.md) | Trang web thử nghiệm tại `GET /` |
 | [testing.md](testing.md) | Unit test, test bằng curl/Python, tiêu chí nghiệm thu |
 | [progress-log.md](progress-log.md) | Nhật ký từng bước, commit, kết quả build |
 | [../../clients/python/README.md](../../clients/python/README.md) | Client Python mẫu (stdlib) |
@@ -31,6 +32,8 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | d | Foreground service, WakeLock, WifiLock, BootReceiver, quyền | xong (build + test JVM; chưa chạy trên máy thật) |
 | e | Màn hình Compose "Coprocessor Server" | xong (build; chưa xem trên máy thật) |
 | f | Client Python mẫu | xong (test với server giả; chưa gọi điện thoại thật) |
+| 2.1 | `POST /api/persons/{id}/images` | xong |
+| 2.2 | Trang web thử nghiệm `GET /` + API ngưỡng + header bảo mật | xong (test JVM; chưa mở trên máy thật) |
 
 Chi tiết từng bước và commit: [progress-log.md](progress-log.md).
 
