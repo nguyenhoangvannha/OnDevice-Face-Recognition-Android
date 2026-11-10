@@ -6,6 +6,25 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Release signing comes only from the environment (GitHub Actions secrets), never from git.
+// Without it, assembleRelease produces an unsigned APK and debug builds are unaffected.
+// REQUIRE_RELEASE_SIGNING=true (set by the release workflow) turns missing signing into an error.
+// See docs/coprocessor/ci-and-release.md.
+val releaseKeystoreFile: File =
+    System.getenv("RELEASE_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) }
+        ?: rootProject.file("keystore.jks")
+val releaseSigningEnv =
+    listOf("RELEASE_KEYSTORE_PASSWORD", "RELEASE_KEYSTORE_ALIAS", "RELEASE_KEY_PASSWORD")
+        .associateWith { System.getenv(it).orEmpty() }
+val hasReleaseSigning = releaseKeystoreFile.isFile && releaseSigningEnv.values.all { it.isNotEmpty() }
+if (System.getenv("REQUIRE_RELEASE_SIGNING") == "true" && !hasReleaseSigning) {
+    throw GradleException(
+        "Release signing required but missing: keystore file " +
+            (if (releaseKeystoreFile.isFile) "found" else "not found") + ", empty variables: " +
+            releaseSigningEnv.filterValues { it.isEmpty() }.keys,
+    )
+}
+
 android {
     namespace = "com.ml.shubham0204.facenet_android"
     compileSdk = 34
@@ -24,11 +43,13 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file("../keystore.jks")
-            storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("RELEASE_KEYSTORE_ALIAS")
-            keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseSigningEnv.getValue("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningEnv.getValue("RELEASE_KEYSTORE_ALIAS")
+                keyPassword = releaseSigningEnv.getValue("RELEASE_KEY_PASSWORD")
+            }
         }
     }
 
@@ -39,7 +60,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else null
         }
     }
     compileOptions {

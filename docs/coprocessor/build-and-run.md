@@ -14,6 +14,7 @@ bash ./gradlew testDebugUnitTest      # unit test JVM
 - Cần JDK 17 và Android SDK (platform 34). Lần build đầu tự tải `model.pte` (~94 MB) từ HuggingFace vào
   `app/src/main/assets/` (đã gitignore).
 - APK: `app/build/outputs/apk/debug/app-debug.apk`.
+- Release đã ký: xem [ci-and-release.md](ci-and-release.md). `assembleRelease` không có biến ký → APK chưa ký.
 
 ## Cài và bật trên Xperia (chưa làm, cần anh)
 

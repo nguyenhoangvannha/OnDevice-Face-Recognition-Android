@@ -14,3 +14,7 @@ local.properties
 # Downloaded at build time by the downloadModel task (~94 MB)
 app/src/main/assets/model.pte
 __pycache__/
+
+# Release signing material never goes into git (CI decodes it from secrets)
+*.jks
+*.keystore

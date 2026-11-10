@@ -102,3 +102,12 @@ Commit: `1704c6f feat(api): add POST /api/persons/{id}/images`.
 - Kiểm tra APK debug có `coprocessor-web/{index.html,app.js,app.css}`.
 - `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**, 23/23 test. `node --check app.js` qua.
 - Chưa mở trang trong trình duyệt thật (cần server chạy trên điện thoại).
+
+Commit: `a98de7e feat(web): serve offline test page at / and add threshold API`.
+
+## 2026-11-10 — Bước 3: GitHub Actions
+
+- Thay `release.yml` upstream; thêm `ci.yml`. Chi tiết, tên secret, cách xử lý model: [ci-and-release.md](ci-and-release.md).
+- `app/build.gradle.kts`: ký release chỉ khi đủ biến môi trường; `REQUIRE_RELEASE_SIGNING`. `.gitignore` chặn `*.jks`, `*.keystore`.
+- Kiểm tra: actionlint sạch; debug build + 23 test qua; release chưa ký build được; release ký bằng khoá dùng một lần verify được.
+- Repo fork: Actions bật (`enabled: true`), chưa có secret nào (`gh secret list` rỗng) → release sẽ fail rõ cho tới khi anh thêm.
