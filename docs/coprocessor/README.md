@@ -28,7 +28,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | a | Docs scaffold + progress log | xong |
 | b | `FaceRecognitionEngine` tách khỏi CameraX, nhận `Bitmap`/`ByteArray` | xong |
 | c | Ktor CIO server: health/status/recognize/enroll/persons | xong (code + test JVM; server được khởi động ở bước d) |
-| d | Foreground service, WakeLock, WifiLock, BootReceiver, quyền | chưa |
+| d | Foreground service, WakeLock, WifiLock, BootReceiver, quyền | xong (build + test JVM; chưa chạy trên máy thật) |
 | e | Màn hình Compose "Coprocessor Server" | chưa |
 | f | Client Python mẫu | chưa |
 
@@ -114,6 +114,8 @@ Thay đổi trên code upstream (camera UI vẫn chạy như cũ):
 | `TokenUtils.kt` | Sinh token 256-bit, so sánh constant-time |
 | `CoprocessorState.kt` | Trạng thái server + 50 request gần nhất (cho dashboard) |
 | `DeviceStatus.kt` | Pin, nhiệt độ pin, thermal status, heap, IPv4 của các interface |
+| `service/CoprocessorService.kt` | Foreground service `specialUse`, WakeLock, WifiLock, chạy `FaceApiServer` |
+| `service/BootReceiver.kt` | Tự khởi động lại sau reboot/cập nhật nếu server đang bật |
 
 Đặc tả endpoint: [api.md](api.md).
 

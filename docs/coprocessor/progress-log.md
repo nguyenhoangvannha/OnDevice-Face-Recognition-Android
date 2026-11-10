@@ -39,3 +39,17 @@ Commit: `f318b35 feat(engine): add FaceRecognitionEngine decoupled from CameraX`
 - `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**; 17/17 test qua
   (SimilarityMath 8, FaceApiModule 6, TokenUtils 2, CoprocessorStateHolder 1).
 - Server chưa được khởi động ở đâu (bước d).
+
+Commit: `226753b feat(api): add Ktor CIO REST API with bearer auth`.
+
+## 2026-11-10 — Bước d: foreground service
+
+- Thêm `CoprocessorService` (type `specialUse`), `BootReceiver`, quyền trong manifest. Lý do chọn type: [configuration-and-security.md](configuration-and-security.md#chạy-nền-247-coprocessorservice).
+- Kiểm tra APK bằng `aapt2 dump xmltree`: service có `foregroundServiceType=0x40000000` (specialUse) và property subtype; đủ quyền.
+- `FaceApiServer.start()` giờ chờ `resolvedConnectors()`. Test "port đã bị chiếm" ban đầu **không** ném lỗi
+  (khi socket chiếm port bind `0.0.0.0`, server bind `127.0.0.1` trên macOS). Sau khi sửa (chờ bind + socket test
+  bind đúng `127.0.0.1`) test qua; chưa tách riêng yếu tố nào quyết định.
+- Thêm `FaceApiServerTest`: chạy CIO thật trên JVM, gọi `/api/health` (200), `/api/persons` không token (401) và có token (200), dừng server.
+- Bỏ cảnh báo opt-in `explicitNulls` (`@OptIn(ExperimentalSerializationApi::class)`).
+- `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**; 19/19 test qua.
+- Chưa chạy trên Xperia (không đụng điện thoại trong lượt này).

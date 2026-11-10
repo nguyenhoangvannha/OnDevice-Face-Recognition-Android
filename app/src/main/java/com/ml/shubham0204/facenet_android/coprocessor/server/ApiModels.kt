@@ -3,12 +3,14 @@ package com.ml.shubham0204.facenet_android.coprocessor.server
 import com.ml.shubham0204.facenet_android.engine.EnrollResult
 import com.ml.shubham0204.facenet_android.engine.PersonSummary
 import com.ml.shubham0204.facenet_android.engine.RecognitionResult
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 const val API_VERSION = 1
 
+@OptIn(ExperimentalSerializationApi::class)
 val ApiJson =
     Json {
         encodeDefaults = true
