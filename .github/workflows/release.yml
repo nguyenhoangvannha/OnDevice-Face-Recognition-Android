@@ -1,6 +1,8 @@
 name: Release APK
 
-# Builds a signed release APK and attaches it to a GitHub Release.
+# Builds a signed arm64-v8a release APK and attaches it to a GitHub Release as
+# FaceNet-Coprocessor-<tag>-arm64-v8a.apk (+ .sha256). A manual run with `universal` ticked also
+# attaches FaceNet-Coprocessor-<tag>-universal.apk (all ABIs, for emulators/x86; ~72 MB bigger).
 # Required repository secrets (names only; see docs/coprocessor/ci-and-release.md):
 #   KEYSTORE_BASE_64, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEYSTORE_ALIAS, RELEASE_KEY_PASSWORD
 # Missing secrets fail the run before anything is built; no unsigned APK is published.
@@ -26,6 +28,11 @@ on:
         type: boolean
         required: false
         default: true
+      universal:
+        description: Also attach a universal APK (all ABIs, ~72 MB bigger)
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -130,7 +137,7 @@ jobs:
           printf '%s' "$KEYSTORE_BASE_64" | base64 --decode > "$RUNNER_TEMP/release.jks"
           echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Build signed release APK
+      - name: Build signed arm64-v8a release APK
         env:
           REQUIRE_RELEASE_SIGNING: "true"
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
@@ -138,14 +145,39 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: bash ./gradlew assembleRelease --stacktrace
 
-      - name: Verify signature and rename
+      - name: Verify arm64-v8a APK and rename
         run: |
           apk=app/build/outputs/apk/release/app-release.apk
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          echo "BUILD_TOOLS=$build_tools" >> "$GITHUB_ENV"
           "$build_tools/apksigner" verify --verbose "$apk"
+          native="$("$build_tools/aapt2" dump badging "$apk" | sed -n 's/^native-code: //p')"
+          echo "native-code: $native"
+          if [ "$native" != "'arm64-v8a'" ]; then
+            echo "::error::Expected only arm64-v8a native code, got: $native"; exit 1
+          fi
+          name="FaceNet-Coprocessor-$TAG-arm64-v8a.apk"
           mkdir -p dist
-          cp "$apk" "dist/FaceNet-Coprocessor-$TAG.apk"
-          (cd dist && sha256sum "FaceNet-Coprocessor-$TAG.apk" > "FaceNet-Coprocessor-$TAG.apk.sha256")
+          cp "$apk" "dist/$name"
+          (cd dist && sha256sum "$name" > "$name.sha256")
+          echo "$name: $(stat -c %s "dist/$name") bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build signed universal release APK
+        if: ${{ inputs.universal }}
+        env:
+          REQUIRE_RELEASE_SIGNING: "true"
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEYSTORE_ALIAS: ${{ secrets.RELEASE_KEYSTORE_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          bash ./gradlew assembleRelease -PuniversalRelease=true --stacktrace
+          apk=app/build/outputs/apk/release/app-release.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose "$apk"
+          "$BUILD_TOOLS/aapt2" dump badging "$apk" | grep '^native-code:'
+          name="FaceNet-Coprocessor-$TAG-universal.apk"
+          cp "$apk" "dist/$name"
+          (cd dist && sha256sum "$name" > "$name.sha256")
+          echo "$name: $(stat -c %s "dist/$name") bytes" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish GitHub Release
         env:
