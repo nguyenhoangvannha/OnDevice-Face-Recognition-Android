@@ -10,6 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ml.shubham0204.facenet_android.presentation.screens.add_face.AddFaceScreen
+import com.ml.shubham0204.facenet_android.presentation.screens.coprocessor.CoprocessorScreen
 import com.ml.shubham0204.facenet_android.presentation.screens.detect_screen.DetectScreen
 import com.ml.shubham0204.facenet_android.presentation.screens.face_list.FaceListScreen
 
@@ -26,7 +27,13 @@ class MainActivity : ComponentActivity() {
                 exitTransition = { fadeOut() },
             ) {
                 composable("add-face") { AddFaceScreen { navHostController.navigateUp() } }
-                composable("detect") { DetectScreen { navHostController.navigate("face-list") } }
+                composable("detect") {
+                    DetectScreen(
+                        onOpenFaceListClick = { navHostController.navigate("face-list") },
+                        onOpenCoprocessorClick = { navHostController.navigate("coprocessor") },
+                    )
+                }
+                composable("coprocessor") { CoprocessorScreen(onNavigateBack = { navHostController.navigateUp() }) }
                 composable("face-list") {
                     FaceListScreen(
                         onNavigateBack = { navHostController.navigateUp() },

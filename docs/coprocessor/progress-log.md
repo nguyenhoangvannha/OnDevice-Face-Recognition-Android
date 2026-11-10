@@ -53,3 +53,12 @@ Commit: `226753b feat(api): add Ktor CIO REST API with bearer auth`.
 - Bỏ cảnh báo opt-in `explicitNulls` (`@OptIn(ExperimentalSerializationApi::class)`).
 - `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**; 19/19 test qua.
 - Chưa chạy trên Xperia (không đụng điện thoại trong lượt này).
+
+Commit: `bcd6ffe feat(service): run the API in a specialUse foreground service`.
+
+## 2026-11-10 — Bước e: dashboard Compose
+
+- Thêm route `coprocessor` trong `MainActivity`, nút mở trên `DetectScreen` (thêm tham số `onOpenCoprocessorClick`).
+- `CoprocessorViewModel` (`@KoinViewModel`): KSP sinh binding cho `CoprocessorViewModel`, `AndroidCoprocessorBackend`,
+  `CoprocessorSettings`, `FaceRecognitionEngine` (đã kiểm tra trong `build/generated/ksp`).
+- `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**; 19/19 test qua. Chưa có UI test; chưa xem trên máy thật.

@@ -29,7 +29,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | b | `FaceRecognitionEngine` tách khỏi CameraX, nhận `Bitmap`/`ByteArray` | xong |
 | c | Ktor CIO server: health/status/recognize/enroll/persons | xong (code + test JVM; server được khởi động ở bước d) |
 | d | Foreground service, WakeLock, WifiLock, BootReceiver, quyền | xong (build + test JVM; chưa chạy trên máy thật) |
-| e | Màn hình Compose "Coprocessor Server" | chưa |
+| e | Màn hình Compose "Coprocessor Server" | xong (build; chưa xem trên máy thật) |
 | f | Client Python mẫu | chưa |
 
 Chi tiết từng bước và commit: [progress-log.md](progress-log.md).
@@ -118,6 +118,22 @@ Thay đổi trên code upstream (camera UI vẫn chạy như cũ):
 | `service/BootReceiver.kt` | Tự khởi động lại sau reboot/cập nhật nếu server đang bật |
 
 Đặc tả endpoint: [api.md](api.md).
+
+## Dashboard "Coprocessor Server"
+
+Mở từ màn hình camera, biểu tượng máy chủ (`Dns`) trên thanh trên cùng. Code:
+`presentation/screens/coprocessor/CoprocessorScreen.kt`, `CoprocessorViewModel.kt`. Làm mới mỗi 5 giây.
+
+| Khối | Nội dung |
+| --- | --- |
+| Server | Công tắc bật/tắt (Android 13+ xin quyền thông báo trước); trạng thái Stopped/Starting/Running/Failed + lỗi |
+| Network | Mọi IPv4 không phải loopback theo interface (`wlan0`, `tun0` nếu có Tailscale) dạng `http://ip:port`; sửa port (áp dụng lần khởi động sau) |
+| API token | Ẩn mặc định; hiện/ẩn; sao chép (đánh dấu sensitive trên Android 13+ để không hiện preview); tạo lại có hộp xác nhận |
+| Similarity threshold | Slider 0.30–0.95, lưu khi thả tay, có hiệu lực ngay cho API; camera trực tiếp vẫn dùng 0.30 riêng |
+| Device | Pin %, đang sạc, nhiệt độ pin, thermal status, heap của app, trạng thái tối ưu pin + nút xin bỏ tối ưu |
+| Recent requests | 50 request gần nhất: giờ, method, path, status, `inference_ms`, số mặt / số người quen, tổng thời gian, IP nguồn |
+
+Kế hoạch có "RAM": dashboard chỉ hiện heap Java của app, không phải RAM toàn máy.
 
 ## Stack thực tế của repo (khảo sát 2026-11-10, commit gốc `f6405d0`)
 
