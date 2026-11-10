@@ -111,3 +111,12 @@ Commit: `a98de7e feat(web): serve offline test page at / and add threshold API`.
 - `app/build.gradle.kts`: ký release chỉ khi đủ biến môi trường; `REQUIRE_RELEASE_SIGNING`. `.gitignore` chặn `*.jks`, `*.keystore`.
 - Kiểm tra: actionlint sạch; debug build + 23 test qua; release chưa ký build được; release ký bằng khoá dùng một lần verify được.
 - Repo fork: Actions bật (`enabled: true`), chưa có secret nào (`gh secret list` rỗng) → release sẽ fail rõ cho tới khi anh thêm.
+
+Commit: `fa585b8 ci: add CI workflow and signed release workflow`.
+
+## 2026-11-10 — Bước 4: khảo sát GPU/NPU (chỉ đọc)
+
+- Xác nhận FaceNet đang chạy ExecuTorch XNNPACK CPU fp32 (chuỗi trong `model.pte` và AAR); anti-spoof chạy LiteRT CPU không XNNPACK.
+- Kiểm AAR `executorch-android-vulkan`/`-qnn` 1.2.0 trên Maven (tải tạm rồi xoá); đọc tài liệu Vulkan, QNN, LiteRT, NNAPI.
+- Kết quả và khuyến nghị: [gpu-npu-survey.md](gpu-npu-survey.md). Không đổi model hay dependency; chỉ sửa docs.
+
