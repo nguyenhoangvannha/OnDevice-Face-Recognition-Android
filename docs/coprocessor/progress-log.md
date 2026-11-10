@@ -149,3 +149,13 @@ Commit: `50ecdfc ci(release): create the tag on manual runs and publish prerelea
 - `bash ./gradlew testDebugUnitTest assembleDebug assembleRelease`: **BUILD SUCCESSFUL**, 39/39 test. `node --check` qua.
 - Chưa chạy trên điện thoại: tốc độ GPU, độ ổn định driver Vulkan **chưa kiểm chứng**.
 
+Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend with CPU fallback`.
+
+## 2026-11-10 — Phát hành thử và model GPU
+
+- Release `models-v1` (prerelease, chỉ chứa model): `facenet-vulkan-fp32.pte` (94,010,112 byte, sha256 `6408b0d4…6d0b8bd`) + `.sha256`.
+  Tải công khai qua URL trong `ModelCatalog`: 302 → file.
+- Push tag `v0.0.1-20261110.15730b9` → workflow Release thành công; prerelease có APK đã ký bằng khoá mới (kiểm bằng apksigner).
+- CI cho `15730b9` (push + PR #1 do anh mở trong fork): xanh.
+- Chạy tay release qua GitHub chưa được vì workflow mới chưa có trên `main` (xem [ci-and-release.md](ci-and-release.md)).
+

@@ -81,6 +81,21 @@ Quy tắc:
 
 Kết quả: Release có `FaceNet-Coprocessor-<tag>.apk` và `.sha256`; link Release ghi vào Summary của lần chạy.
 
+**Lưu ý chạy tay:** GitHub chỉ cho "Run workflow" khi file workflow có trên nhánh mặc định (`main`). `main` của fork
+vẫn là `release.yml` cũ của upstream (không có `workflow_dispatch`), nên `gh workflow run release.yml --ref feature/...`
+hiện trả `404 workflow release.yml not found on the default branch`. Sau khi anh merge PR #1 (feature → main của fork), chạy
+tay sẽ dùng được. Tới lúc đó dùng đường push tag.
+
+Đã kiểm (2026-11-10):
+
+- Push tag `v0.0.1-20261110.15730b9` → run `42817305688` thành công (4m45s), prerelease
+  https://github.com/nguyenhoangvannha/OnDevice-Face-Recognition-Android/releases/tag/v0.0.1-20261110.15730b9 với
+  APK 224,622,591 byte + `.sha256`. Tải về: sha256 khớp, `apksigner`: Verifies, v2, 1 signer, `CN=NHVN Face Coprocessor`,
+  SHA-256 chứng chỉ `a6cb4415…7d0eeff4` (trùng keystore trong `~/.secrets/face-coprocessor/`).
+- Nhánh chạy tay (chưa chạy được trên GitHub vì lý do trên): chạy thử khối "Resolve tag" trên MacBook với API thật (chỉ đọc):
+  tag trống → tên suy ra trùng tag đã có cùng commit → dùng lại; tag mới → "will be created"; tag sai định dạng → lỗi;
+  tag có sẵn ở commit khác → lỗi `already exists on ... not on ...`.
+
 `versionName`/`versionCode` trong Gradle vẫn là `0.0.1`/`1` như upstream: chưa tự lấy từ tag.
 
 ## Đã kiểm tra trên MacBook
