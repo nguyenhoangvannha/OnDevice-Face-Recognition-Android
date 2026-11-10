@@ -8,6 +8,11 @@ import com.ml.shubham0204.facenet_android.engine.RecognitionResult
 import com.ml.shubham0204.facenet_android.engine.RecognitionTimings
 import com.ml.shubham0204.facenet_android.engine.RecognizedFace
 import com.ml.shubham0204.facenet_android.engine.RejectedImage
+import com.ml.shubham0204.facenet_android.engine.backend.BackendPhase
+import com.ml.shubham0204.facenet_android.engine.backend.BackendStatus
+import com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableException
+import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
+import com.ml.shubham0204.facenet_android.engine.backend.ModelCatalog
 import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
@@ -89,6 +94,17 @@ private class FakeBackend : CoprocessorBackend {
     override fun setThreshold(value: Float): Float {
         storedThreshold = value
         return storedThreshold
+    }
+
+    var backendStatus = BackendStatus(InferenceBackend.CPU, InferenceBackend.CPU, BackendPhase.READY)
+
+    override fun getBackendSettings(): BackendSettingsResponse =
+        backendSettingsResponse(backendStatus, ModelCatalog.all) { false }
+
+    override fun selectBackend(backend: InferenceBackend): BackendSettingsResponse {
+        if (!ModelCatalog.spec(backend).available) throw BackendUnavailableException(backend, "not shipped")
+        backendStatus = backendStatus.copy(requested = backend, phase = BackendPhase.DOWNLOADING, totalBytes = 100)
+        return getBackendSettings()
     }
 
     override suspend fun status(): StatusResponse = StatusResponse(80, 31.5f, true, "none", 40, 256, true, 1, 2, 0.7f, 5, 9, 33)
@@ -263,6 +279,41 @@ class FaceApiModuleTest {
                 assertEquals(bad, HttpStatusCode.BadRequest, res.status)
             }
             assertEquals(0.65f, backend.storedThreshold, 1e-6f)
+        }
+
+    @Test
+    fun backendApi() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/api/settings/backend").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.put("/api/settings/backend") { contentType(ContentType.Application.Json); setBody("{\"backend\":\"gpu\"}") }.status)
+
+            val current = client.get("/api/settings/backend") { auth() }.json()
+            assertEquals("cpu", current["requested"]!!.jsonPrimitive.content)
+            assertEquals("cpu", current["active"]!!.jsonPrimitive.content)
+            assertEquals("ready", current["phase"]!!.jsonPrimitive.content)
+            val options = current["backends"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(listOf("cpu", "gpu", "npu"), options.map { it["id"]!!.jsonPrimitive.content })
+            assertEquals(listOf("bundled", "download", "none"), options.map { it["source"]!!.jsonPrimitive.content })
+            assertEquals("false", options[2]["available"]!!.jsonPrimitive.content)
+
+            val gpu = client.put("/api/settings/backend") { auth(); contentType(ContentType.Application.Json); setBody("{\"backend\":\"GPU\"}") }
+            assertEquals(HttpStatusCode.Accepted, gpu.status)
+            assertEquals("gpu", gpu.json()["requested"]!!.jsonPrimitive.content)
+            assertEquals("downloading", gpu.json()["phase"]!!.jsonPrimitive.content)
+
+            val npu = client.put("/api/settings/backend") { auth(); contentType(ContentType.Application.Json); setBody("{\"backend\":\"npu\"}") }
+            assertEquals(HttpStatusCode.Conflict, npu.status)
+            assertEquals("backend_unavailable", npu.json()["error"]!!.jsonPrimitive.content)
+
+            for (bad in listOf("{\"backend\":\"tpu\"}", "{}", "not json")) {
+                val res = client.put("/api/settings/backend") { auth(); contentType(ContentType.Application.Json); setBody(bad) }
+                assertEquals(bad, HttpStatusCode.BadRequest, res.status)
+                assertEquals("invalid_backend", res.json()["error"]!!.jsonPrimitive.content)
+            }
+            val big = client.put("/api/settings/backend") { auth(); contentType(ContentType.Application.Json); setBody("{\"backend\":\"" + "x".repeat(5000) + "\"}") }
+            assertEquals(HttpStatusCode.PayloadTooLarge, big.status)
+            assertEquals(InferenceBackend.GPU, backend.backendStatus.requested)
         }
 
     @Test

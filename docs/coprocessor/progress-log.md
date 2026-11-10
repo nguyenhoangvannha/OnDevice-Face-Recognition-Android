@@ -136,3 +136,16 @@ Commit: `2bf203a docs(coprocessor): add GPU/NPU acceleration survey`.
 - Nay input `tag` tuỳ chọn; trống → `v<versionName>-<yyyymmdd>.<shortsha>`. Tạo tag sau khi APK đã ký và verify; tag có sẵn ở commit khác → lỗi. Chạy tay mặc định prerelease. Chi tiết: [ci-and-release.md](ci-and-release.md).
 - actionlint sạch.
 
+Commit: `50ecdfc ci(release): create the tag on manual runs and publish prereleases`.
+
+## 2026-11-10 — Bước 3: chọn backend CPU/GPU/NPU
+
+- Xác nhận nguồn `model.pte`: facenet-pytorch `InceptionResnetV1` VGGFace2 + `(x-127.5)/128`, cosine 1.000000 trên 8 ảnh.
+- `tools/export/`: phiên bản ghim, `export_pte.py` (xnnpack/vulkan/qnn), `verify_pte.py`, `quant_drift.py`. Venv mới cho file giống hệt byte.
+- Vulkan: 572/575 node vào Vulkan. QNN: không export (licence Qualcomm cần anh quyết; file SDK tải thử trên box đã xoá).
+- App: `BackendController` (CPU trước, GPU tải nền + kiểm sha256 + probe so với CPU ≥ 0.999, fallback CPU, chống crash lặp),
+  thẻ dashboard, trang web, `GET/PUT /api/settings/backend`, trường mới trong `/api/status`.
+- Dependency: `executorch-android` → `executorch-android-vulkan` 1.2.0 (APK +~11.3 MB).
+- `bash ./gradlew testDebugUnitTest assembleDebug assembleRelease`: **BUILD SUCCESSFUL**, 39/39 test. `node --check` qua.
+- Chưa chạy trên điện thoại: tốc độ GPU, độ ổn định driver Vulkan **chưa kiểm chứng**.
+

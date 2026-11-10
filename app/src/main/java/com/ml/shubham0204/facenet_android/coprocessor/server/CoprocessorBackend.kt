@@ -2,6 +2,7 @@ package com.ml.shubham0204.facenet_android.coprocessor.server
 
 import com.ml.shubham0204.facenet_android.engine.EnrollResult
 import com.ml.shubham0204.facenet_android.engine.PersonSummary
+import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
 
 /** What the REST layer needs from the app. Faked in JVM tests. */
 interface CoprocessorBackend {
@@ -37,4 +38,12 @@ interface CoprocessorBackend {
 
     /** Persists the threshold (same storage as the app slider) and returns the stored value. */
     fun setThreshold(value: Float): Float
+
+    fun getBackendSettings(): BackendSettingsResponse
+
+    /**
+     * Persists the choice and starts switching in the background (download/load/verify).
+     * @throws com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableException
+     */
+    fun selectBackend(backend: InferenceBackend): BackendSettingsResponse
 }

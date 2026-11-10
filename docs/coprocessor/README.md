@@ -20,6 +20,8 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | [web-test-page.md](web-test-page.md) | Trang web thử nghiệm tại `GET /` |
 | [ci-and-release.md](ci-and-release.md) | GitHub Actions: CI, release APK đã ký, tag tự tạo, secret và nơi giữ keystore |
 | [gpu-npu-survey.md](gpu-npu-survey.md) | Khảo sát tăng tốc GPU/NPU (Vulkan, QNN, LiteRT), khuyến nghị |
+| [inference-backends.md](inference-backends.md) | Chọn CPU / GPU (Vulkan) / NPU: trạng thái, fallback, kích thước APK, model tải theo yêu cầu |
+| [../../tools/export/README.md](../../tools/export/README.md) | Script export FaceNet → ExecuTorch tái tạo được (phiên bản ghim, sha256) |
 | [testing.md](testing.md) | Unit test, test bằng curl/Python, tiêu chí nghiệm thu |
 | [progress-log.md](progress-log.md) | Nhật ký từng bước, commit, kết quả build |
 | [../../clients/python/README.md](../../clients/python/README.md) | Client Python mẫu (stdlib) |
@@ -40,6 +42,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | 2.4 | Khảo sát GPU/NPU (chỉ đọc) | xong (chưa đo trên máy thật) |
 | 3.1 | Chạy tay release tự tạo tag (prerelease) | xong |
 | 3.2 | Keystore + 4 secret GitHub | xong (bản gốc ở `~/.secrets/face-coprocessor/` trên MacBook) |
+| 3.3 | Chọn backend CPU/GPU/NPU + export model | CPU, GPU xong (chưa chạy trên máy thật); NPU chưa có (cần anh chấp nhận licence QNN SDK) |
 
 Chi tiết từng bước và commit: [progress-log.md](progress-log.md).
 
@@ -53,7 +56,7 @@ flowchart TD
     subgraph Phone["Sony Xperia 5 III (IP LAN: chưa chốt)"]
         KTOR["Ktor CIO :8080\nBearer token"] --> ENGINE[FaceRecognitionEngine]
         ENGINE --> DET["ML Kit Face Detection"]
-        DET --> EMB["FaceNet 512D (ExecuTorch, model.pte)"]
+        DET --> EMB["FaceNet 512D (ExecuTorch: CPU XNNPACK mặc định, GPU Vulkan tuỳ chọn)"]
         EMB --> DB["ObjectBox HNSW cosine 512D\n(+ tìm tuyến tính chính xác)"]
         FGS["Foreground service\nWakeLock + WifiLock"] -.giữ sống.-> KTOR
         UI["Compose: Coprocessor Server dashboard"] -.điều khiển.-> FGS
@@ -107,6 +110,7 @@ Thay đổi trên code upstream (camera UI vẫn chạy như cũ):
 - `BaseFaceDetector`: thêm `getCroppedFace(Bitmap)`; `getAllCroppedFaces` thêm tham số `highAccuracy = false`.
 - `FaceNet` và `FaceSpoofDetector`: khoá `Mutex` quanh suy luận, vì camera và API có thể chạy đồng thời
   (tính thread-safe của ExecuTorch `Module` không được tài liệu hoá; `Interpreter` của LiteRT không thread-safe).
+  Từ vòng 3, `FaceNet` chỉ tiền xử lý ảnh; nạp model, khoá và chọn backend nằm ở `engine/backend/BackendController.kt`.
 - `ImagesVectorDB`: sửa lỗi `chunked(0)` khi < 4 bản ghi; thêm `count()`. `PersonDB`: thêm `get(id)`, `getAllOnce()`.
 - `ImageVectorUseCase` dùng chung `SimilarityMath.cosineSimilarity` (ngưỡng camera vẫn `> 0.3` như upstream).
 
@@ -154,7 +158,7 @@ Kế hoạch có "RAM": dashboard chỉ hiện heap Java của app, không phả
 | UI | Jetpack Compose (BOM 2024.05.00), Material3, Navigation Compose 2.7.7 |
 | DI | Koin 3.5.6 + Koin Annotations 1.3.1 (KSP, `KOIN_CONFIG_CHECK=true`) |
 | Face detection | Google ML Kit `face-detection:16.1.7` (MediaPipe đã bị upstream gỡ ở `9d48d50`) |
-| Embedding | **ExecuTorch** `org.pytorch:executorch-android:1.2.0`, model `model.pte` (VGGFace2 InceptionResnetV1, 512D, XNNPACK fp32, ~94 MB) tải từ HuggingFace bởi task `downloadModel` lúc build |
+| Embedding | **ExecuTorch** `org.pytorch:executorch-android-vulkan:1.2.0` (vòng 3; trước là `executorch-android`), model `model.pte` (facenet-pytorch InceptionResnetV1 VGGFace2, 512D, XNNPACK fp32, ~94 MB, đã kiểm nguồn) tải từ HuggingFace bởi task `downloadModel` lúc build; model GPU tải khi dùng |
 | Anti-spoof | MiniFASNet 2 model `.tflite` chạy bằng LiteRT `com.google.ai.edge.litert:*:1.1.2` |
 | Vector DB | ObjectBox 5.4.2 (plugin 4.0.0), `@HnswIndex(dimensions=512, COSINE)` |
 | Camera | CameraX 1.3.3, `ImageAnalysis.Analyzer` trong `FaceDetectionOverlay` |
@@ -165,7 +169,7 @@ Kế hoạch có "RAM": dashboard chỉ hiện heap Java của app, không phả
 | Kế hoạch | Thực tế / quyết định |
 | --- | --- |
 | Package `com.shubham0204.facerecognition.engine` | Dùng `com.ml.shubham0204.facenet_android.engine` (package thật) |
-| FaceNet chạy TFLite (`facenet.tflite`), GPU/NNAPI | Upstream đã chuyển sang ExecuTorch (`model.pte`, CPU/XNNPACK). Không có file `.tflite` cho FaceNet. GPU/NNAPI cho FaceNet không áp dụng |
+| FaceNet chạy TFLite (`facenet.tflite`), GPU/NNAPI | Upstream đã chuyển sang ExecuTorch (`model.pte`, CPU/XNNPACK). Không có file `.tflite` cho FaceNet. NNAPI không dùng (deprecated); GPU qua ExecuTorch Vulkan từ vòng 3 |
 | Thêm `org.tensorflow:tensorflow-lite:2.16.1` | **Không thêm**: repo đã dùng LiteRT 1.1.2 (cùng package `org.tensorflow.lite`), thêm vào sẽ trùng class |
 | Vector DB "Room / ObjectBox" | Chỉ có ObjectBox; không dùng Room |
 | Ngưỡng cosine mặc định `0.70` | App gốc dùng `> 0.3`. Giữ mặc định API `0.70` theo kế hoạch nhưng **chưa kiểm chứng**: có thể làm sót người quen. Chỉnh được bằng slider; cần hiệu chỉnh bằng ảnh thật |

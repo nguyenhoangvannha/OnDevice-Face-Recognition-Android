@@ -28,6 +28,11 @@ class FaceApiServerTest {
         override fun getThreshold(): Float = 0.7f
 
         override fun setThreshold(value: Float): Float = value
+
+        override fun getBackendSettings(): BackendSettingsResponse = error("unused")
+
+        override fun selectBackend(backend: com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend): BackendSettingsResponse =
+            error("unused")
     }
 
     @Test

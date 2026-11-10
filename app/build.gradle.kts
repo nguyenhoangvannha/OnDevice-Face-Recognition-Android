@@ -114,8 +114,9 @@ dependencies {
     implementation(libs.koin.androidx.compose)
     ksp(libs.koin.ksp.compiler)
 
-    // ExecuTorch
-    implementation("org.pytorch:executorch-android:1.2.0")
+    // ExecuTorch with XNNPACK (CPU) + Vulkan (GPU) delegates. Same Java API as executorch-android;
+    // backend AARs cannot be combined (duplicate classes), so QNN would need a custom AAR.
+    implementation("org.pytorch:executorch-android-vulkan:1.2.0")
 
     // LiteRT
     implementation(libs.tensorflow.lite)

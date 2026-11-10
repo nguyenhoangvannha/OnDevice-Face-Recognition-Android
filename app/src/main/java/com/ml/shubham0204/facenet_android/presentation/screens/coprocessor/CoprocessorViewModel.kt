@@ -8,6 +8,11 @@ import androidx.lifecycle.viewModelScope
 import com.ml.shubham0204.facenet_android.coprocessor.CoprocessorSettings
 import com.ml.shubham0204.facenet_android.coprocessor.CoprocessorState
 import com.ml.shubham0204.facenet_android.coprocessor.DeviceStatus
+import com.ml.shubham0204.facenet_android.coprocessor.backend.AndroidModelProvider
+import com.ml.shubham0204.facenet_android.engine.backend.BackendController
+import com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableException
+import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
+import com.ml.shubham0204.facenet_android.engine.backend.ModelCatalog
 import com.ml.shubham0204.facenet_android.coprocessor.service.CoprocessorService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -18,7 +23,15 @@ import org.koin.android.annotation.KoinViewModel
 class CoprocessorViewModel(
     private val context: Context,
     private val settings: CoprocessorSettings,
+    private val backends: BackendController,
 ) : ViewModel() {
+    private val modelFiles = AndroidModelProvider(context)
+
+    val backendStatus = backends.status
+    val backendOptions = ModelCatalog.all
+    val downloadedBackends = mutableStateOf(downloaded())
+    val backendError = mutableStateOf<String?>(null)
+
     val serverStatus = CoprocessorState.holder.status
     val recentRequests = CoprocessorState.holder.recentRequests
 
@@ -47,6 +60,20 @@ class CoprocessorViewModel(
         serverEnabled.value = settings.serverEnabled
         // The web page can change the threshold too (PUT /api/settings/threshold).
         if (!draggingThreshold) threshold.floatValue = settings.threshold
+        downloadedBackends.value = downloaded()
+    }
+
+    private fun downloaded(): Set<InferenceBackend> =
+        ModelCatalog.all.filter { it.available && modelFiles.isLocal(it) }.map { it.backend }.toSet()
+
+    fun selectBackend(backend: InferenceBackend) {
+        backendError.value =
+            try {
+                backends.select(backend)
+                null
+            } catch (e: BackendUnavailableException) {
+                e.message
+            }
     }
 
     private var draggingThreshold = false

@@ -40,6 +40,21 @@ python3 clients/python/xperia_face_client.py enroll "An" an1.jpg an2.jpg
 time python3 clients/python/xperia_face_client.py recognize snapshot.jpg       # so inference_ms và tổng thời gian
 ```
 
+Backend (CPU/GPU), xem [inference-backends.md](inference-backends.md):
+
+```bash
+H="Authorization: Bearer $XPERIA_FACE_TOKEN"
+for b in cpu gpu; do
+  curl -s -X PUT -H "$H" -H 'Content-Type: application/json' -d "{\"backend\":\"$b\"}" "$XPERIA_FACE_URL/api/settings/backend"
+  until curl -s -H "$H" "$XPERIA_FACE_URL/api/settings/backend" | grep -Eq '"phase":"(ready|failed)"'; do sleep 3; done
+  curl -s -H "$H" "$XPERIA_FACE_URL/api/settings/backend"                     # active, fallback_reason
+  for i in 1 2 3 4 5; do curl -s -H "$H" -F image=@snapshot.jpg "$XPERIA_FACE_URL/api/recognize" | grep -o '"embedding_ms":[0-9]*'; done
+done
+```
+
+Ghi lại: `active` có đúng là `gpu` không, `embedding_ms` CPU vs GPU, `similarity` của cùng ảnh trên hai backend (phải gần như
+bằng nhau), nhiệt độ sau 10 phút gọi liên tục. Nếu app crash khi bật GPU, mở lại app: phải tự ở CPU và báo lý do.
+
 Kiểm 24/7: tắt màn hình, gọi `/api/health` mỗi phút trong 72 giờ, ghi lại `/api/status` (nhiệt độ pin, thermal status).
 Kiểm reboot: khởi động lại điện thoại, không mở app, gọi `/api/health`.
 

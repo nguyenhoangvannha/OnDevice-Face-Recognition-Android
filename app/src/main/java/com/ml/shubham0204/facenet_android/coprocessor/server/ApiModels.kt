@@ -3,6 +3,9 @@ package com.ml.shubham0204.facenet_android.coprocessor.server
 import com.ml.shubham0204.facenet_android.engine.EnrollResult
 import com.ml.shubham0204.facenet_android.engine.PersonSummary
 import com.ml.shubham0204.facenet_android.engine.RecognitionResult
+import com.ml.shubham0204.facenet_android.engine.backend.BackendStatus
+import com.ml.shubham0204.facenet_android.engine.backend.ModelSource
+import com.ml.shubham0204.facenet_android.engine.backend.ModelSpec
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -69,6 +72,10 @@ data class StatusResponse(
     @SerialName("uptime_s") val uptimeSeconds: Long,
     @SerialName("requests_served") val requestsServed: Long,
     @SerialName("android_sdk") val androidSdk: Int,
+    /** Hardware embeddings run on now (cpu/gpu/npu); null before the model is loaded. */
+    @SerialName("inference_backend") val inferenceBackend: String? = null,
+    @SerialName("inference_backend_requested") val inferenceBackendRequested: String? = null,
+    @SerialName("inference_backend_fallback_reason") val inferenceBackendFallbackReason: String? = null,
 )
 
 @Serializable
@@ -153,6 +160,71 @@ data class ThresholdResponse(
 data class ThresholdRequest(
     val threshold: Float,
 )
+
+@Serializable
+data class BackendOptionDto(
+    val id: String,
+    val label: String,
+    val available: Boolean,
+    /** Why it cannot be selected, when [available] is false. */
+    val reason: String?,
+    /** bundled | download | none */
+    val source: String,
+    /** Model file present on the phone (always true for bundled). */
+    val downloaded: Boolean,
+    @SerialName("size_bytes") val sizeBytes: Long?,
+    val precision: String,
+)
+
+@Serializable
+data class BackendSettingsResponse(
+    val requested: String,
+    val active: String?,
+    /** idle | downloading | loading | ready | failed */
+    val phase: String,
+    @SerialName("downloaded_bytes") val downloadedBytes: Long,
+    @SerialName("total_bytes") val totalBytes: Long?,
+    @SerialName("fallback_reason") val fallbackReason: String?,
+    val backends: List<BackendOptionDto>,
+)
+
+@Serializable
+data class BackendRequest(
+    val backend: String,
+)
+
+fun backendSettingsResponse(
+    status: BackendStatus,
+    catalog: List<ModelSpec>,
+    isLocal: (ModelSpec) -> Boolean,
+): BackendSettingsResponse =
+    BackendSettingsResponse(
+        requested = status.requested.wireName,
+        active = status.active?.wireName,
+        phase = status.phase.name.lowercase(),
+        downloadedBytes = status.downloadedBytes,
+        totalBytes = status.totalBytes,
+        fallbackReason = status.fallbackReason,
+        backends =
+            catalog.map { spec ->
+                val source = spec.source
+                BackendOptionDto(
+                    id = spec.backend.wireName,
+                    label = spec.backend.label,
+                    available = spec.available,
+                    reason = (source as? ModelSource.Unavailable)?.reason,
+                    source =
+                        when (source) {
+                            is ModelSource.Asset -> "bundled"
+                            is ModelSource.Remote -> "download"
+                            is ModelSource.Unavailable -> "none"
+                        },
+                    downloaded = source is ModelSource.Asset || (spec.available && isLocal(spec)),
+                    sizeBytes = spec.sizeBytes,
+                    precision = spec.precision,
+                )
+            },
+    )
 
 @Serializable
 data class DeleteResponse(

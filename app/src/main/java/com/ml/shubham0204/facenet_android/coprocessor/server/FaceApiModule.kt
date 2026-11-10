@@ -2,6 +2,8 @@ package com.ml.shubham0204.facenet_android.coprocessor.server
 
 import com.ml.shubham0204.facenet_android.coprocessor.RequestLogEntry
 import com.ml.shubham0204.facenet_android.coprocessor.TokenUtils
+import com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableException
+import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -77,6 +79,9 @@ fun Application.faceApiModule(
         }
         exception<InvalidImageException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, ApiError("invalid_image", cause.message ?: ""))
+        }
+        exception<BackendUnavailableException> { call, cause ->
+            call.respond(HttpStatusCode.Conflict, ApiError("backend_unavailable", cause.message ?: ""))
         }
         exception<BadRequestException> { call, _ ->
             call.respond(HttpStatusCode.BadRequest, ApiError("bad_request", "Malformed request"))
@@ -186,19 +191,26 @@ fun Application.faceApiModule(
             get("/api/settings/threshold") { call.respond(ThresholdResponse(backend.getThreshold())) }
 
             put("/api/settings/threshold") {
-                val declared = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                if (declared != null && declared > MAX_JSON_BYTES) throw PayloadTooLargeException(MAX_JSON_BYTES)
                 val value =
-                    try {
-                        ApiJson.decodeFromString(ThresholdRequest.serializer(), call.receiveText()).threshold
-                    } catch (e: IllegalArgumentException) { // includes SerializationException
-                        null
-                    }
+                    call.receiveSmallJson(ThresholdRequest.serializer())?.threshold
                 if (value == null || value.isNaN() || value < 0f || value > 1f) {
                     call.respond(HttpStatusCode.BadRequest, ApiError("invalid_threshold", "Send JSON {\"threshold\": <0..1>}"))
                     return@put
                 }
                 call.respond(ThresholdResponse(backend.setThreshold(value)))
+            }
+
+            get("/api/settings/backend") { call.respond(backend.getBackendSettings()) }
+
+            // Switching is asynchronous (a GPU model may need a ~94 MB download first): 202, then poll GET.
+            put("/api/settings/backend") {
+                val requested = InferenceBackend.fromWire(call.receiveSmallJson(BackendRequest.serializer())?.backend)
+                if (requested == null) {
+                    val ids = InferenceBackend.entries.joinToString("|") { it.wireName }
+                    call.respond(HttpStatusCode.BadRequest, ApiError("invalid_backend", "Send JSON {\"backend\": \"$ids\"}"))
+                    return@put
+                }
+                call.respond(HttpStatusCode.Accepted, backend.selectBackend(requested))
             }
 
             get("/api/persons") {
@@ -215,6 +227,17 @@ fun Application.faceApiModule(
                 }
             }
         }
+    }
+}
+
+/** Small JSON body (<= MAX_JSON_BYTES); null when it is not valid JSON for [serializer]. */
+private suspend fun <T> ApplicationCall.receiveSmallJson(serializer: kotlinx.serialization.KSerializer<T>): T? {
+    val declared = request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+    if (declared != null && declared > MAX_JSON_BYTES) throw PayloadTooLargeException(MAX_JSON_BYTES)
+    return try {
+        ApiJson.decodeFromString(serializer, receiveText())
+    } catch (e: IllegalArgumentException) { // includes SerializationException
+        null
     }
 }
 

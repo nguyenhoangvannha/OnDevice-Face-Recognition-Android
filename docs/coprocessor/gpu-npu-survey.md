@@ -1,5 +1,9 @@
 # Khảo sát tăng tốc GPU/NPU cho FaceNet (chỉ đọc)
 
+> **Cập nhật vòng 3:** nguồn model đã được xác nhận (facenet-pytorch InceptionResnetV1 VGGFace2, cosine 1.000000 so với
+> `model.pte`), có script export tái tạo được ở `tools/export/`, và app đã có lựa chọn CPU/GPU (Vulkan). NPU vẫn chưa có.
+> Xem [inference-backends.md](inference-backends.md). Phần dưới giữ nguyên như lúc khảo sát.
+
 Ngày khảo sát: 2026-11-10. Lượt này **chỉ khảo sát**: không đổi model, không đổi dependency, không
 chạy gì trên điện thoại. Mục nào chưa đo/chưa thấy tài liệu khẳng định được ghi **chưa kiểm chứng**.
 

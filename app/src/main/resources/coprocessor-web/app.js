@@ -80,6 +80,9 @@
       ["Battery optimization", data.ignoring_battery_optimizations ? "unrestricted" : "optimized"],
       ["Persons / face records", data.persons + " / " + data.face_records],
       ["Threshold", String(data.threshold)],
+      ["Inference backend", (data.inference_backend || "not loaded") +
+        (data.inference_backend_requested && data.inference_backend_requested !== data.inference_backend
+          ? " (requested " + data.inference_backend_requested + ")" : "")],
       ["Uptime", data.uptime_s + " s"],
       ["Requests served", String(data.requests_served)],
       ["Android SDK", String(data.android_sdk)],
@@ -109,6 +112,50 @@
     const { data } = await api("PUT", "/api/settings/threshold", { threshold: value });
     $("threshold").value = data.threshold.toFixed(2);
     say($("threshold-msg"), "Saved: " + data.threshold.toFixed(2), "ok");
+  }));
+
+  // --- inference backend ---
+  let backendTimer = null;
+  function mb(bytes) { return bytes == null ? "?" : Math.round(bytes / 1e6) + " MB"; }
+  function renderBackend(data) {
+    const box = $("backend-options");
+    box.replaceChildren();
+    data.backends.forEach((b) => {
+      const label = document.createElement("label");
+      label.className = "option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "backend";
+      input.value = b.id;
+      input.checked = b.id === data.requested;
+      input.disabled = !b.available;
+      const text = document.createElement("span");
+      let detail = b.precision + ", ";
+      if (!b.available) detail = b.reason || "not available";
+      else if (b.source === "bundled") detail += "bundled";
+      else detail += b.downloaded ? "downloaded" : "download " + mb(b.size_bytes) + " on first use";
+      text.textContent = " " + b.label + " — " + detail;
+      label.append(input, text);
+      box.append(label);
+    });
+    let state = "Active: " + (data.active || "not loaded") + " · " + data.phase;
+    if (data.phase === "downloading") state += " " + mb(data.downloaded_bytes) + " / " + mb(data.total_bytes);
+    if (data.fallback_reason) state += " · fell back to CPU: " + data.fallback_reason;
+    say($("backend-state"), state, data.fallback_reason ? "error" : "ok");
+    clearTimeout(backendTimer);
+    if (data.phase === "downloading" || data.phase === "loading") backendTimer = setTimeout(loadBackend, 2000);
+  }
+  const loadBackend = guarded($("backend-msg"), async () => {
+    const { data } = await api("GET", "/api/settings/backend");
+    renderBackend(data);
+  });
+  $("backend-reload").addEventListener("click", loadBackend);
+  $("backend-form").addEventListener("submit", guarded($("backend-msg"), async () => {
+    const checked = document.querySelector('input[name="backend"]:checked');
+    if (!checked) throw new Error("Choose a backend");
+    const { data } = await api("PUT", "/api/settings/backend", { backend: checked.value });
+    renderBackend(data);
+    say($("backend-msg"), "Switch requested: " + checked.value, "ok");
   }));
 
   // --- recognize ---
@@ -233,6 +280,7 @@
     if (!getToken()) return;
     loadStatus();
     loadThreshold();
+    loadBackend();
     loadPersons();
   }
 

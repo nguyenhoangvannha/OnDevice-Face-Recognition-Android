@@ -40,6 +40,17 @@
 </section>
 
 <section>
+  <h2>Inference backend</h2>
+  <form id="backend-form">
+    <div id="backend-options"></div>
+    <button type="submit">Switch</button>
+    <button type="button" id="backend-reload">Reload</button>
+  </form>
+  <p id="backend-state"></p>
+  <p id="backend-msg" class="muted">Same FaceNet weights on every backend. A GPU model is downloaded (~94 MB) on first use and is only used if its output matches CPU.</p>
+</section>
+
+<section>
   <h2>Recognize</h2>
   <form id="recognize-form">
     <input id="recognize-file" type="file" accept="image/*" required>

@@ -16,3 +16,5 @@ th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #8883; }
 dl { display: grid; grid-template-columns: max-content auto; gap: 2px 16px; }
 dt { color: #888; }
 dd { margin: 0; }
+
+label.option { display: block; margin: 0.25rem 0; }

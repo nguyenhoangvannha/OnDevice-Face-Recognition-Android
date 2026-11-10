@@ -3,6 +3,8 @@ package com.ml.shubham0204.facenet_android.coprocessor
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.ml.shubham0204.facenet_android.engine.backend.BackendPrefs
+import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
 import org.koin.core.annotation.Single
 
 /**
@@ -12,7 +14,7 @@ import org.koin.core.annotation.Single
 @Single
 class CoprocessorSettings(
     context: Context,
-) {
+) : BackendPrefs {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -53,6 +55,22 @@ class CoprocessorSettings(
             prefs.edit { putBoolean(KEY_ENABLED, value) }
         }
 
+    /** Hardware for FaceNet embeddings, chosen in the dashboard or via PUT /api/settings/backend. */
+    override var requestedBackend: InferenceBackend
+        get() = InferenceBackend.fromWire(prefs.getString(KEY_BACKEND, null)) ?: InferenceBackend.DEFAULT
+        set(value) {
+            prefs.edit(commit = true) { putString(KEY_BACKEND, value.wireName) }
+        }
+
+    /** Crash guard; written with commit() so it survives a native crash during model init. */
+    override var pendingProbe: InferenceBackend?
+        get() = InferenceBackend.fromWire(prefs.getString(KEY_PENDING_PROBE, null))
+        set(value) {
+            prefs.edit(commit = true) {
+                if (value == null) remove(KEY_PENDING_PROBE) else putString(KEY_PENDING_PROBE, value.wireName)
+            }
+        }
+
     companion object {
         const val PREFS_NAME = "coprocessor_settings"
         const val DEFAULT_PORT = 8080
@@ -66,5 +84,7 @@ class CoprocessorSettings(
         private const val KEY_PORT = "port"
         private const val KEY_THRESHOLD = "threshold"
         private const val KEY_ENABLED = "server_enabled"
+        private const val KEY_BACKEND = "inference_backend"
+        private const val KEY_PENDING_PROBE = "inference_backend_pending_probe"
     }
 }

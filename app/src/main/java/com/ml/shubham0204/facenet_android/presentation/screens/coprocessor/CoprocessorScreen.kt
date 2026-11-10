@@ -35,7 +35,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -57,6 +59,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ml.shubham0204.facenet_android.coprocessor.RequestLogEntry
 import com.ml.shubham0204.facenet_android.coprocessor.ServerStatus
+import com.ml.shubham0204.facenet_android.engine.backend.BackendPhase
+import com.ml.shubham0204.facenet_android.engine.backend.ModelSource
 import com.ml.shubham0204.facenet_android.presentation.theme.FaceNetAndroidTheme
 import org.koin.androidx.compose.koinViewModel
 import java.text.SimpleDateFormat
@@ -89,6 +93,7 @@ fun CoprocessorScreen(onNavigateBack: () -> Unit) {
                 item { NetworkCard(viewModel) }
                 item { TokenCard(viewModel) }
                 item { ThresholdCard(viewModel) }
+                item { BackendCard(viewModel) }
                 item { DeviceCard(viewModel) }
                 item { Text("Recent requests", style = MaterialTheme.typography.titleMedium) }
                 item { RecentRequests(viewModel) }
@@ -262,6 +267,61 @@ private const val THRESHOLD_MIN = 0.30f
 private const val THRESHOLD_MAX = 0.95f
 
 @SuppressLint("BatteryLife")
+@Composable
+private fun BackendCard(viewModel: CoprocessorViewModel) {
+    val status by viewModel.backendStatus.collectAsState()
+    val downloaded by viewModel.downloadedBackends
+    val error by viewModel.backendError
+    Section("Inference backend") {
+        viewModel.backendOptions.forEach { spec ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = status.requested == spec.backend,
+                    onClick = { viewModel.selectBackend(spec.backend) },
+                    enabled = spec.available,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(spec.backend.label)
+                    val detail =
+                        when (val source = spec.source) {
+                            is ModelSource.Asset -> "${spec.precision}, bundled"
+                            is ModelSource.Remote ->
+                                "${spec.precision}, " +
+                                    if (spec.backend in downloaded) "downloaded" else "download ${mb(spec.sizeBytes)} on first use"
+                            is ModelSource.Unavailable -> source.reason
+                        }
+                    Text(detail, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        val active = status.active?.label ?: "not loaded yet"
+        Text("Active: $active · ${status.phase.name.lowercase()}")
+        if (status.phase == BackendPhase.DOWNLOADING) {
+            val total = status.totalBytes
+            if (total != null && total > 0) {
+                LinearProgressIndicator(
+                    progress = { (status.downloadedBytes.toFloat() / total).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("${mb(status.downloadedBytes)} / ${mb(total)}", style = MaterialTheme.typography.bodySmall)
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+        status.fallbackReason?.let {
+            Text("Fell back to CPU: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        Text(
+            "Same FaceNet weights on every backend; a backend is used only if its output matches CPU on a test input. " +
+                "Speed on this phone has not been measured yet.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+private fun mb(bytes: Long?): String = if (bytes == null) "?" else String.format(Locale.US, "%.0f MB", bytes / 1_000_000.0)
+
 @Composable
 private fun DeviceCard(viewModel: CoprocessorViewModel) {
     val context = LocalContext.current

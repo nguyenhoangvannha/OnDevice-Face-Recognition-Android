@@ -2,7 +2,13 @@ package com.ml.shubham0204.facenet_android.coprocessor
 
 import android.content.Context
 import android.os.Build
+import com.ml.shubham0204.facenet_android.coprocessor.backend.AndroidModelProvider
+import com.ml.shubham0204.facenet_android.coprocessor.server.BackendSettingsResponse
 import com.ml.shubham0204.facenet_android.coprocessor.server.CoprocessorBackend
+import com.ml.shubham0204.facenet_android.coprocessor.server.backendSettingsResponse
+import com.ml.shubham0204.facenet_android.engine.backend.BackendController
+import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
+import com.ml.shubham0204.facenet_android.engine.backend.ModelCatalog
 import com.ml.shubham0204.facenet_android.coprocessor.server.InvalidImageException
 import com.ml.shubham0204.facenet_android.coprocessor.server.RecognizeOutcome
 import com.ml.shubham0204.facenet_android.coprocessor.server.StatusResponse
@@ -22,7 +28,18 @@ class AndroidCoprocessorBackend(
     private val context: Context,
     private val engine: FaceRecognitionEngine,
     private val settings: CoprocessorSettings,
+    private val backends: BackendController,
 ) : CoprocessorBackend {
+    private val modelFiles = AndroidModelProvider(context)
+
+    override fun getBackendSettings(): BackendSettingsResponse =
+        backendSettingsResponse(backends.status.value, ModelCatalog.all, modelFiles::isLocal)
+
+    override fun selectBackend(backend: InferenceBackend): BackendSettingsResponse {
+        backends.select(backend)
+        return getBackendSettings()
+    }
+
     override suspend fun recognize(
         image: ByteArray,
         withLiveness: Boolean,
@@ -88,6 +105,9 @@ class AndroidCoprocessorBackend(
                 uptimeSeconds = running?.let { (System.currentTimeMillis() - it.startedAtMillis) / 1000 } ?: 0,
                 requestsServed = state.requestsServed,
                 androidSdk = Build.VERSION.SDK_INT,
+                inferenceBackend = backends.status.value.active?.wireName,
+                inferenceBackendRequested = backends.status.value.requested.wireName,
+                inferenceBackendFallbackReason = backends.status.value.fallbackReason,
             )
         }
 }

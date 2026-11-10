@@ -23,6 +23,7 @@ Test: `app/src/test/.../coprocessor/server/FaceApiModuleTest.kt` (chạy trên J
 | POST | `/api/persons/{id}/images` | có | Thêm 1..10 ảnh cho người đã có |
 | GET | `/api/persons` | có | Danh sách người đã đăng ký |
 | GET / PUT | `/api/settings/threshold` | có | Đọc / đặt ngưỡng cosine (lưu cùng chỗ với slider trong app) |
+| GET / PUT | `/api/settings/backend` | có | Đọc / chọn phần cứng chạy FaceNet: `cpu` / `gpu` / `npu` |
 | DELETE | `/api/persons/{id}` | có | Xoá người và mọi embedding của họ |
 
 ## Giới hạn
@@ -49,9 +50,14 @@ Test: `app/src/test/.../coprocessor/server/FaceApiModuleTest.kt` (chạy trên J
   "heap_used_mb": 40, "heap_max_mb": 256,
   "ignoring_battery_optimizations": true,
   "persons": 3, "face_records": 9, "threshold": 0.7,
-  "uptime_s": 3600, "requests_served": 120, "android_sdk": 33
+  "uptime_s": 3600, "requests_served": 120, "android_sdk": 33,
+  "inference_backend": "cpu", "inference_backend_requested": "gpu",
+  "inference_backend_fallback_reason": "gpu failed: ..."
 }
 ```
+
+- `inference_backend`: phần cứng đang tính embedding (`null` khi model chưa nạp xong);
+  `inference_backend_requested`: lựa chọn đã lưu; khác nhau khi đang tải/nạp hoặc đã rơi về CPU (lý do ở trường cuối).
 
 - `thermal_status`: `none|light|moderate|severe|critical|emergency|shutdown` từ `PowerManager` (Android 10+), `null` nếu thấp hơn.
   Không có nhiệt độ SoC: Android không có API công khai cho app thường.
@@ -159,3 +165,35 @@ curl -s -X PUT -H "Authorization: Bearer $XPERIA_FACE_TOKEN" -H "Content-Type: a
 - Giá trị 0..1 (kể cả 0 và 1). Ngoài khoảng, thiếu trường, hay JSON hỏng → `400 invalid_threshold`. Body > 4 KiB → `413`.
 - Lưu vào `CoprocessorSettings` (SharedPreferences), có hiệu lực ngay cho request sau. Slider trong app cho phép
   0.30–0.95; giá trị đặt qua API ngoài khoảng đó vẫn được lưu, slider chỉ hiển thị kẹp trong khoảng.
+
+## GET / PUT /api/settings/backend
+
+```bash
+curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" "$XPERIA_FACE_URL/api/settings/backend"
+curl -s -X PUT -H "Authorization: Bearer $XPERIA_FACE_TOKEN" -H "Content-Type: application/json" \
+     -d '{"backend": "gpu"}' "$XPERIA_FACE_URL/api/settings/backend"     # 202 Accepted
+```
+
+```json
+{
+  "requested": "gpu", "active": "cpu", "phase": "downloading",
+  "downloaded_bytes": 31457280, "total_bytes": 94010112, "fallback_reason": null,
+  "backends": [
+    {"id": "cpu", "label": "Default (CPU, XNNPACK)", "available": true, "reason": null,
+     "source": "bundled", "downloaded": true, "size_bytes": 94011392, "precision": "fp32"},
+    {"id": "gpu", "label": "GPU (Vulkan)", "available": true, "reason": null,
+     "source": "download", "downloaded": false, "size_bytes": 94010112, "precision": "fp32"},
+    {"id": "npu", "label": "NPU (Qualcomm QNN HTP, SM8350)", "available": false, "reason": "Not shipped yet: ...",
+     "source": "none", "downloaded": false, "size_bytes": null, "precision": "int8 (planned)"}
+  ]
+}
+```
+
+- `PUT` lưu lựa chọn rồi chuyển **nền** → luôn `202`; theo dõi bằng `GET` (`phase`: `idle|downloading|loading|ready|failed`).
+  Trong lúc tải/nạp, nhận diện vẫn chạy trên backend cũ.
+- Tên không hợp lệ / JSON hỏng → `400 invalid_backend`; backend chưa có model (hiện là `npu`) → `409 backend_unavailable`;
+  body > 4 KiB → `413`.
+- `phase: failed` + `fallback_reason`: backend được chọn không chạy được (tải lỗi, checksum sai, nạp lỗi, chạy lỗi, kết quả khác CPU,
+  hoặc lần trước làm app crash) → đang dùng CPU. Lựa chọn vẫn được giữ; `PUT` lại để thử lại.
+- Chi tiết: [inference-backends.md](inference-backends.md).
+
