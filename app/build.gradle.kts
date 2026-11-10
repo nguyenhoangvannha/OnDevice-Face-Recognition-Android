@@ -25,6 +25,11 @@ if (System.getenv("REQUIRE_RELEASE_SIGNING") == "true" && !hasReleaseSigning) {
     )
 }
 
+// Release APKs contain only arm64-v8a native libs (the Xperia 5 III and every 64-bit ARM phone).
+// `-PuniversalRelease=true` builds a release with every ABI the dependencies ship (emulators, x86).
+// Debug builds are never filtered, so they still run on x86_64 emulators.
+val universalRelease = (project.findProperty("universalRelease") as String?)?.toBoolean() == true
+
 android {
     namespace = "com.ml.shubham0204.facenet_android"
     compileSdk = 34
@@ -61,6 +66,9 @@ android {
                 "proguard-rules.pro",
             )
             signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else null
+            if (!universalRelease) {
+                ndk { abiFilters += "arm64-v8a" }
+            }
         }
     }
     compileOptions {
