@@ -26,3 +26,16 @@ Commit: `f384910 docs(coprocessor): add design docs, repo survey and progress lo
 - Thêm `testImplementation("junit:junit:4.13.2")` và `SimilarityMathTest` (8 test).
 - `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**, 8/8 test qua.
 - Chưa chạy trên máy thật.
+
+Commit: `f318b35 feat(engine): add FaceRecognitionEngine decoupled from CameraX`.
+
+## 2026-11-10 — Bước c: Ktor REST server
+
+- Thêm Ktor 2.3.12 (server-core, cio, content-negotiation, serialization-kotlinx-json, auth, status-pages) và plugin
+  `org.jetbrains.kotlin.plugin.serialization` 2.0.0 (cùng version Kotlin của repo). Test: `ktor-server-test-host`.
+- Ktor 2.3.12 kéo `kotlinx-serialization-json` 1.5.1, `kotlinx-coroutines-core` 1.7.3. Không có xung đột class (`checkDebugDuplicateClasses` qua).
+- Lưu ý API: ở Ktor 2.3 `PartData.FileItem.streamProvider()` là extension, phải import `io.ktor.http.content.streamProvider`.
+- Loại `coprocessor_settings.xml` khỏi backup.
+- `bash ./gradlew assembleDebug testDebugUnitTest`: **BUILD SUCCESSFUL**; 17/17 test qua
+  (SimilarityMath 8, FaceApiModule 6, TokenUtils 2, CoprocessorStateHolder 1).
+- Server chưa được khởi động ở đâu (bước d).

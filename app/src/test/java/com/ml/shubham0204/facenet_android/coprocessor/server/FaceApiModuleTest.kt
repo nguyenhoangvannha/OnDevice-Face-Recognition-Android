@@ -1,0 +1,211 @@
+package com.ml.shubham0204.facenet_android.coprocessor.server
+
+import com.ml.shubham0204.facenet_android.coprocessor.RequestLogEntry
+import com.ml.shubham0204.facenet_android.engine.EnrollResult
+import com.ml.shubham0204.facenet_android.engine.FaceBox
+import com.ml.shubham0204.facenet_android.engine.PersonSummary
+import com.ml.shubham0204.facenet_android.engine.RecognitionResult
+import com.ml.shubham0204.facenet_android.engine.RecognitionTimings
+import com.ml.shubham0204.facenet_android.engine.RecognizedFace
+import com.ml.shubham0204.facenet_android.engine.RejectedImage
+import io.ktor.client.request.delete
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
+import io.ktor.server.testing.ApplicationTestBuilder
+import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+private const val TOKEN = "test-token-not-a-secret"
+
+private class FakeBackend : CoprocessorBackend {
+    val persons = linkedMapOf(1L to PersonSummary(1, "An", 2, 1000))
+    var lastLiveness: Boolean? = null
+
+    override suspend fun recognize(
+        image: ByteArray,
+        withLiveness: Boolean,
+    ): RecognizeOutcome {
+        if (image.decodeToString() == "not-an-image") throw InvalidImageException()
+        lastLiveness = withLiveness
+        val faces =
+            listOf(
+                RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true),
+                RecognizedFace(FaceBox(50, 60, 90, 99), null, null, 0.21f, false),
+            )
+        return RecognizeOutcome(RecognitionResult(faces, 42, 640, 480, 0.7f, RecognitionTimings(10, 25, 7, 0)), 3)
+    }
+
+    override suspend fun enroll(
+        name: String,
+        images: List<ByteArray>,
+    ): EnrollResult {
+        if (name == "Nobody") return EnrollResult(null, name, 0, images.indices.map { RejectedImage(it, "No faces were in the image") })
+        persons[2] = PersonSummary(2, name, images.size.toLong(), 2000)
+        return EnrollResult(2, name, images.size, emptyList())
+    }
+
+    override suspend fun listPersons(): List<PersonSummary> = persons.values.toList()
+
+    override suspend fun deletePerson(personId: Long): Boolean = persons.remove(personId) != null
+
+    override suspend fun status(): StatusResponse = StatusResponse(80, 31.5f, true, "none", 40, 256, true, 1, 2, 0.7f, 5, 9, 33)
+}
+
+class FaceApiModuleTest {
+    private val backend = FakeBackend()
+    private val log = mutableListOf<RequestLogEntry>()
+
+    private fun api(block: suspend ApplicationTestBuilder.() -> Unit) =
+        testApplication {
+            application {
+                faceApiModule(
+                    backend = backend,
+                    tokenProvider = { TOKEN },
+                    limits = ApiLimits(maxRequestBytes = 4096, maxEnrollImages = 2),
+                    onRequest = { log += it },
+                )
+            }
+            block()
+        }
+
+    private fun imagePart(bytes: ByteArray, field: String = "image") =
+        formData {
+            append(
+                field,
+                bytes,
+                Headers.build {
+                    append(HttpHeaders.ContentType, "image/jpeg")
+                    append(HttpHeaders.ContentDisposition, "filename=\"snap.jpg\"")
+                },
+            )
+        }
+
+    private suspend fun HttpResponse.json(): JsonObject = ApiJson.parseToJsonElement(bodyAsText()).jsonObject
+
+    @Test
+    fun healthNeedsNoTokenAndLeaksNoDeviceInfo() =
+        api {
+            val res = client.get("/api/health")
+            assertEquals(HttpStatusCode.OK, res.status)
+            val body = res.json()
+            assertEquals("ok", body["status"]!!.jsonPrimitive.content)
+            assertFalse(body.containsKey("battery_pct"))
+        }
+
+    @Test
+    fun protectedEndpointsRejectMissingOrWrongToken() =
+        api {
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/api/status").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/api/persons") { header(HttpHeaders.Authorization, "Bearer wrong") }.status)
+            assertEquals(HttpStatusCode.Unauthorized, client.post("/api/recognize") { setBody(MultiPartFormDataContent(imagePart(byteArrayOf(1)))) }.status)
+            assertEquals(HttpStatusCode.Unauthorized, client.delete("/api/persons/1").status)
+            assertEquals(HttpStatusCode.OK, client.get("/api/status") { header(HttpHeaders.Authorization, "Bearer $TOKEN") }.status)
+        }
+
+    @Test
+    fun recognizeReturnsSnakeCaseResult() =
+        api {
+            val res =
+                client.post("/api/recognize?liveness=true") {
+                    header(HttpHeaders.Authorization, "Bearer $TOKEN")
+                    setBody(MultiPartFormDataContent(imagePart("jpeg-bytes".toByteArray())))
+                }
+            assertEquals(HttpStatusCode.OK, res.status)
+            val body = res.json()
+            assertEquals(42L, body["inference_ms"]!!.jsonPrimitive.long)
+            assertEquals(2, body["face_count"]!!.jsonPrimitive.int)
+            assertEquals(1, body["recognized_count"]!!.jsonPrimitive.int)
+            assertEquals(3L, body["timings"]!!.jsonObject["decode_ms"]!!.jsonPrimitive.long)
+            val first = body["faces"]!!.jsonArray[0].jsonObject
+            assertEquals("An", first["name"]!!.jsonPrimitive.content)
+            assertEquals(1L, first["person_id"]!!.jsonPrimitive.long)
+            assertEquals(true, backend.lastLiveness)
+            val last = log.last()
+            assertEquals("/api/recognize", last.path)
+            assertEquals(42L, last.inferenceMs)
+            assertEquals(2, last.faceCount)
+        }
+
+    @Test
+    fun recognizeValidatesInput() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            val missing = client.post("/api/recognize") { auth(); setBody(MultiPartFormDataContent(formData { append("name", "x") })) }
+            assertEquals(HttpStatusCode.BadRequest, missing.status)
+            assertEquals("missing_image", missing.json()["error"]!!.jsonPrimitive.content)
+
+            val bad = client.post("/api/recognize") { auth(); setBody(MultiPartFormDataContent(imagePart("not-an-image".toByteArray()))) }
+            assertEquals(HttpStatusCode.BadRequest, bad.status)
+            assertEquals("invalid_image", bad.json()["error"]!!.jsonPrimitive.content)
+
+            val empty = client.post("/api/recognize") { auth(); setBody(MultiPartFormDataContent(imagePart(ByteArray(0)))) }
+            assertEquals(HttpStatusCode.BadRequest, empty.status)
+
+            val big = client.post("/api/recognize") { auth(); setBody(MultiPartFormDataContent(imagePart(ByteArray(8192)))) }
+            assertEquals(HttpStatusCode.PayloadTooLarge, big.status)
+
+            val notMultipart = client.post("/api/recognize") { auth(); contentType(ContentType.Application.Json); setBody("{}") }
+            assertEquals(HttpStatusCode.UnsupportedMediaType, notMultipart.status)
+        }
+
+    @Test
+    fun enrollFlow() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            fun form(name: String?, count: Int) =
+                MultiPartFormDataContent(
+                    formData {
+                        if (name != null) append("name", name)
+                        repeat(count) {
+                            append("image", byteArrayOf(1, 2, 3), Headers.build { append(HttpHeaders.ContentDisposition, "filename=\"$it.jpg\"") })
+                        }
+                    },
+                )
+            assertEquals(HttpStatusCode.BadRequest, client.post("/api/enroll") { auth(); setBody(form(null, 1)) }.status)
+            assertEquals(HttpStatusCode.BadRequest, client.post("/api/enroll") { auth(); setBody(form("Binh", 0)) }.status)
+            val tooMany = client.post("/api/enroll") { auth(); setBody(form("Binh", 3)) }
+            assertEquals("too_many_images", tooMany.json()["error"]!!.jsonPrimitive.content)
+
+            val none = client.post("/api/enroll") { auth(); setBody(form("Nobody", 1)) }
+            assertEquals(HttpStatusCode.UnprocessableEntity, none.status)
+            assertEquals(1, none.json()["images_rejected"]!!.jsonArray.size)
+
+            val ok = client.post("/api/enroll") { auth(); setBody(form("Binh", 2)) }
+            assertEquals(HttpStatusCode.Created, ok.status)
+            assertEquals(2L, ok.json()["person_id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
+    fun personsListAndDelete() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            val list = client.get("/api/persons") { auth() }.json()
+            assertEquals(1, list["count"]!!.jsonPrimitive.int)
+            assertEquals("An", list["persons"]!!.jsonArray[0].jsonObject["name"]!!.jsonPrimitive.content)
+
+            assertEquals(HttpStatusCode.BadRequest, client.delete("/api/persons/abc") { auth() }.status)
+            assertEquals(HttpStatusCode.NotFound, client.delete("/api/persons/99") { auth() }.status)
+            assertEquals(HttpStatusCode.OK, client.delete("/api/persons/1") { auth() }.status)
+            assertTrue(backend.persons.isEmpty())
+        }
+}

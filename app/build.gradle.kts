@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
     id("com.google.devtools.ksp")
 }
 
@@ -117,8 +118,17 @@ dependencies {
     // MLKit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.7")
 
+    // Ktor embedded server (coprocessor REST API)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.status.pages)
+
     // JVM unit tests
     testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.ktor.server.test.host)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
