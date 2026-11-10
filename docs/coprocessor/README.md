@@ -18,7 +18,7 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | [build-and-run.md](build-and-run.md) | Build trên Mac, cài APK, bật server, cấu hình điện thoại |
 | [configuration-and-security.md](configuration-and-security.md) | Token, port, ngưỡng, foreground service, quyền, backup, quyền riêng tư |
 | [web-test-page.md](web-test-page.md) | Trang web thử nghiệm tại `GET /` |
-| [ci-and-release.md](ci-and-release.md) | GitHub Actions: CI, release APK đã ký, secret cần thêm |
+| [ci-and-release.md](ci-and-release.md) | GitHub Actions: CI, release APK đã ký, tag tự tạo, secret và nơi giữ keystore |
 | [gpu-npu-survey.md](gpu-npu-survey.md) | Khảo sát tăng tốc GPU/NPU (Vulkan, QNN, LiteRT), khuyến nghị |
 | [testing.md](testing.md) | Unit test, test bằng curl/Python, tiêu chí nghiệm thu |
 | [progress-log.md](progress-log.md) | Nhật ký từng bước, commit, kết quả build |
@@ -36,8 +36,10 @@ App gốc (màn hình camera, thêm khuôn mặt, danh sách) **vẫn giữ nguy
 | f | Client Python mẫu | xong (test với server giả; chưa gọi điện thoại thật) |
 | 2.1 | `POST /api/persons/{id}/images` | xong |
 | 2.2 | Trang web thử nghiệm `GET /` + API ngưỡng + header bảo mật | xong (test JVM; chưa mở trên máy thật) |
-| 2.3 | GitHub Actions CI + release APK đã ký | xong (release chờ anh thêm secret và tạo tag) |
+| 2.3 | GitHub Actions CI + release APK đã ký | xong |
 | 2.4 | Khảo sát GPU/NPU (chỉ đọc) | xong (chưa đo trên máy thật) |
+| 3.1 | Chạy tay release tự tạo tag (prerelease) | xong |
+| 3.2 | Keystore + 4 secret GitHub | xong (bản gốc ở `~/.secrets/face-coprocessor/` trên MacBook) |
 
 Chi tiết từng bước và commit: [progress-log.md](progress-log.md).
 

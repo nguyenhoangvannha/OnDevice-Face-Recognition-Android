@@ -5,28 +5,30 @@ Hai workflow trong `.github/workflows/`:
 | File | Khi nào chạy | Làm gì |
 | --- | --- | --- |
 | `ci.yml` | push lên `main` hoặc `feature/**`, pull request, chạy tay | `testDebugUnitTest` + `assembleDebug`; test client Python trên 3.8 và 3.12 |
-| `release.yml` | push tag `v*`, hoặc chạy tay với input `tag` (tag đã có) | Build APK release đã ký, kiểm chữ ký, đưa lên GitHub Release |
+| `release.yml` | push tag `v*`, hoặc chạy tay (input `tag` tuỳ chọn, tự tạo tag nếu chưa có) | Build APK release đã ký, kiểm chữ ký, đưa lên GitHub Release |
 
 `release.yml` cũ của upstream (`actions/create-release@v1`, `upload-release-asset@v1` đã ngừng bảo trì, chạy `./gradlew build`
 rồi `assembleRelease`) được **thay thế**. Tên secret giữ nguyên như upstream để không phải đổi thói quen.
 
-## Secret anh cần thêm
+## Secret (đã đặt 2026-11-10)
 
-Settings → Secrets and variables → Actions → New repository secret (repo `nguyenhoangvannha/OnDevice-Face-Recognition-Android`).
-Em không tạo và không đọc giá trị nào.
+Theo yêu cầu của anh, em đã tạo keystore và đặt 4 secret trên repo `nguyenhoangvannha/OnDevice-Face-Recognition-Android`
+(`gh secret set` đọc từ file qua stdin; không giá trị nào in ra hay nằm trong git):
 
 | Tên | Nội dung |
 | --- | --- |
-| `KEYSTORE_BASE_64` | File keystore (`.jks`/PKCS12) mã hoá base64 một dòng, ví dụ `base64 -i release.jks \| tr -d '\n'` trên macOS |
-| `RELEASE_KEYSTORE_PASSWORD` | Mật khẩu keystore |
-| `RELEASE_KEYSTORE_ALIAS` | Alias của khoá ký |
-| `RELEASE_KEY_PASSWORD` | Mật khẩu khoá (với PKCS12 thường trùng mật khẩu keystore) |
+| `KEYSTORE_BASE_64` | `release.jks` (PKCS12) mã hoá base64 một dòng |
+| `RELEASE_KEYSTORE_PASSWORD` | Mật khẩu keystore (ngẫu nhiên, `openssl rand`) |
+| `RELEASE_KEYSTORE_ALIAS` | Alias khoá ký |
+| `RELEASE_KEY_PASSWORD` | Mật khẩu khoá (PKCS12: trùng mật khẩu keystore) |
 
-Tạo keystore (nếu chưa có), làm trên máy anh, giữ bản sao an toàn (mất khoá thì không cập nhật đè được APK đã cài):
+Khoá: RSA 4096, SHA384withRSA, hạn 10000 ngày (tới 2054-03-28), `CN=NHVN Face Coprocessor`.
 
-```bash
-keytool -genkeypair -keystore release.jks -storetype PKCS12 -alias <alias> -keyalg RSA -keysize 4096 -validity 10000
-```
+**Bản gốc nằm ngoài mọi repo git** trên MacBook: `~/.secrets/face-coprocessor/` (thư mục 700, file 600): `release.jks`,
+`alias.txt`, `store_password.txt`, `key_password.txt`, `keystore.b64`, `README.txt`. Anh nên sao lưu thư mục này
+(ví dụ vào trình quản lý mật khẩu): mất khoá thì APK sau không cài đè được APK đã ký trước.
+
+Đổi khoá sau này: tạo keystore mới rồi `gh secret set <TÊN> < file` cho từng secret.
 
 Không commit keystore: `.gitignore` đã chặn `*.jks`, `*.keystore`.
 
@@ -59,12 +61,25 @@ Nếu upstream đổi model trên HuggingFace, CI sẽ fail ở bước checksum
 
 ## Phát hành
 
-```bash
-git tag v0.1.0 && git push origin v0.1.0     # anh tự làm; em không tạo tag/release
-```
+Trước 2026-11-10 (vòng 3), chạy tay **không** tạo tag: input `tag` là bắt buộc và phải có sẵn (`checkout` tag và
+`gh release create --verify-tag` sẽ lỗi nếu chưa có). Nay:
 
-Kết quả: Release `v0.1.0` (notes tự sinh) có `FaceNet-Coprocessor-v0.1.0.apk` và file `.sha256`. Chạy lại cho tag đã có:
-Actions → Release APK → Run workflow → nhập tag (ghi đè asset cùng tên).
+| Cách chạy | Tag | Prerelease |
+| --- | --- | --- |
+| `git push origin v0.1.0` | tag vừa push | có nếu tag chứa `-` (vd. `v0.2.0-rc1`), không thì release thường |
+| Actions → Release APK → Run workflow, chọn nhánh, để trống `tag` | `v<versionName>-<yyyymmdd>.<shortsha>` (ngày UTC), vd. `v0.0.1-20261110.2bf203a` | mặc định **có** (ô `prerelease`) |
+| Run workflow với `tag` = `v0.1.0` | `v0.1.0` | theo ô `prerelease` |
+
+Quy tắc:
+
+- Tag chưa có → được tạo (API `git/refs`) trên commit đầu nhánh đã chọn, **chỉ sau khi** APK build và `apksigner verify` qua,
+  nên build lỗi không để lại tag rác. Cần `permissions: contents: write` (đã khai báo).
+- Tag đã có trên **đúng** commit đó → build lại, ghi đè asset cùng tên.
+- Tag đã có trên commit **khác** → dừng với lỗi `Tag ... already exists on <sha>`.
+- Tag phải khớp `^v[0-9A-Za-z._+-]+$`.
+- Tag do `GITHUB_TOKEN` tạo không kích hoạt lại workflow (không chạy đúp).
+
+Kết quả: Release có `FaceNet-Coprocessor-<tag>.apk` và `.sha256`; link Release ghi vào Summary của lần chạy.
 
 `versionName`/`versionCode` trong Gradle vẫn là `0.0.1`/`1` như upstream: chưa tự lấy từ tag.
 

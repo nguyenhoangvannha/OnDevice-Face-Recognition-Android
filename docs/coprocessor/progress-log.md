@@ -120,3 +120,19 @@ Commit: `fa585b8 ci: add CI workflow and signed release workflow`.
 - Kiểm AAR `executorch-android-vulkan`/`-qnn` 1.2.0 trên Maven (tải tạm rồi xoá); đọc tài liệu Vulkan, QNN, LiteRT, NNAPI.
 - Kết quả và khuyến nghị: [gpu-npu-survey.md](gpu-npu-survey.md). Không đổi model hay dependency; chỉ sửa docs.
 
+Commit: `2bf203a docs(coprocessor): add GPU/NPU acceleration survey`.
+
+# Vòng 3
+
+## 2026-11-10 — Bước 2: keystore + secret GitHub
+
+- Anh yêu cầu em tự tạo. Trên MacBook: mật khẩu `openssl rand`, `keytool` PKCS12 RSA 4096, hạn 10000 ngày, `CN=NHVN Face Coprocessor`.
+- Lưu ở `~/.secrets/face-coprocessor/` (700/600), ngoài mọi repo git. Không in giá trị nào.
+- `gh secret set` 4 secret qua stdin từ file; `gh secret list` thấy đủ 4 tên.
+
+## 2026-11-10 — Bước 1: chạy tay release tự tạo tag
+
+- Trước đây chạy tay **không** tạo tag (input `tag` bắt buộc, phải có sẵn).
+- Nay input `tag` tuỳ chọn; trống → `v<versionName>-<yyyymmdd>.<shortsha>`. Tạo tag sau khi APK đã ký và verify; tag có sẵn ở commit khác → lỗi. Chạy tay mặc định prerelease. Chi tiết: [ci-and-release.md](ci-and-release.md).
+- actionlint sạch.
+

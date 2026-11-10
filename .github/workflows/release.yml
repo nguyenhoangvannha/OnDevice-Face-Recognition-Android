@@ -4,6 +4,13 @@ name: Release APK
 # Required repository secrets (names only; see docs/coprocessor/ci-and-release.md):
 #   KEYSTORE_BASE_64, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEYSTORE_ALIAS, RELEASE_KEY_PASSWORD
 # Missing secrets fail the run before anything is built; no unsigned APK is published.
+#
+# Tag handling:
+# - push of a v* tag: builds that tag; the release is a prerelease when the tag contains '-'.
+# - manual run (workflow_dispatch) on a branch: builds the branch head. The tag is the `tag`
+#   input, or, when empty, v<versionName>-<yyyymmdd>.<shortsha> (UTC date). A missing tag is
+#   created on that commit after the APK is built and verified; a tag that already points to a
+#   different commit fails the run. Manual runs are prereleases unless `prerelease` is unticked.
 
 on:
   push:
@@ -11,18 +18,23 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag (v*) to build and attach to its release
-        required: true
+        description: "Tag (v*). Empty = v<versionName>-<yyyymmdd>.<shortsha>. Created if missing."
+        required: false
+        default: ""
+      prerelease:
+        description: Mark the GitHub Release as a prerelease
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
-  TAG: ${{ inputs.tag || github.ref_name }}
   MODEL_URL: https://huggingface.co/shubhxm0204/facenet-executorch/resolve/main/vggface2-inception-resnetv1-xnnpack-fp32
   MODEL_SHA256: 06927e2f1e272686258d57fe6a8abaf8efce7e61a26d7b13e6ba40fa130251e2
   MODEL_PATH: app/src/main/assets/model.pte
@@ -39,7 +51,6 @@ jobs:
           RELEASE_KEYSTORE_ALIAS: ${{ secrets.RELEASE_KEYSTORE_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          case "$TAG" in v*) ;; *) echo "::error::Tag must start with 'v' (got '$TAG')"; exit 1 ;; esac
           missing=""
           for name in KEYSTORE_BASE_64 RELEASE_KEYSTORE_PASSWORD RELEASE_KEYSTORE_ALIAS RELEASE_KEY_PASSWORD; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
@@ -50,8 +61,46 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tag="$GITHUB_REF_NAME"
+            case "$tag" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          else
+            tag="$INPUT_TAG"
+            if [ -z "$tag" ]; then
+              version="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -1)"
+              [ -n "$version" ] || { echo "::error::versionName not found in app/build.gradle.kts"; exit 1; }
+              tag="v${version}-$(date -u +%Y%m%d).$(git rev-parse --short=7 HEAD)"
+            fi
+            prerelease="${INPUT_PRERELEASE:-true}"
+          fi
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9A-Za-z._+-]+$'; then
+            echo "::error::Invalid tag '$tag' (must match ^v[0-9A-Za-z._+-]+$)"; exit 1
+          fi
+          create_tag=false
+          if existing="$(gh api "repos/$GITHUB_REPOSITORY/commits/refs/tags/$tag" --jq .sha 2>/dev/null)"; then
+            if [ "$existing" != "$sha" ]; then
+              echo "::error::Tag $tag already exists on $existing, not on $sha"; exit 1
+            fi
+            echo "Tag $tag already exists on $sha"
+          else
+            [ "$GITHUB_EVENT_NAME" = "push" ] && { echo "::error::Pushed tag $tag not found"; exit 1; }
+            create_tag=true
+            echo "Tag $tag will be created on $sha after a successful build"
+          fi
+          {
+            echo "TAG=$tag"
+            echo "TAG_SHA=$sha"
+            echo "CREATE_TAG=$create_tag"
+            echo "PRERELEASE=$prerelease"
+          } >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v4
         with:
@@ -102,11 +151,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$CREATE_TAG" = "true" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$TAG_SHA" > /dev/null
+            echo "Created tag $TAG on $TAG_SHA"
+          fi
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" dist/* --verify-tag --title "$TAG" --generate-notes
+            flags=()
+            [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+            gh release create "$TAG" dist/* --verify-tag --title "$TAG" --generate-notes "${flags[@]}"
           fi
+          echo "Release: $(gh release view "$TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove keystore
         if: always()
