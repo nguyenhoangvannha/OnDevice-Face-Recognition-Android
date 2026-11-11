@@ -183,3 +183,12 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
 - Ảnh giữ lại: 13/13 đúng người (cosine 0.568–0.892). Người lạ (bỏ tạm từng người): 0.307–0.684. Ngưỡng 0.40 đang đặt nhận nhầm 28/33; 0.70 → 0/33 nhưng bỏ lỡ 4/13. Khuyến nghị 0.65–0.70, chưa đổi.
 - Độ trễ CPU: toàn trình trung vị 422 ms, suy luận 361 ms (ML Kit 218 ms, FaceNet 138 ms). Chưa thử GPU.
 - Chi tiết: [testing.md](testing.md).
+
+## 2026-11-11 — Kẹp khung mặt, ngưỡng 0.70, đo GPU
+
+- Ngưỡng trên máy đặt 0.70 qua API. GPU (Vulkan) đang chạy, không fallback.
+- GPU: embedding 105 ms (CPU 138 ms); ML Kit (CPU) dao động 66–230 ms giữa các đợt đo. Toàn trình tốt nhất 243 ms.
+- Ở 0.70 vẫn nhầm Gia_Han ↔ Em_be_t (0.71–0.76) trên crop mới từ `camera_que_2`. Cần thêm ảnh cho hai bé.
+- Nhánh `fix/clamp-face-box`: `FaceBoxClamp` kẹp khung vào ảnh (bỏ khi cạnh < 20 px hoặc < 50% khung trong ảnh), lý do từ chối
+  mới `Face is too small or mostly outside the image`, 9 test mới (48/48 qua), `assembleDebug`/`assembleRelease` qua. PR, chưa merge.
+- Ảnh thử cho anh: `~/Downloads/xperia-face-test/` trên MacBook (có README.txt).
