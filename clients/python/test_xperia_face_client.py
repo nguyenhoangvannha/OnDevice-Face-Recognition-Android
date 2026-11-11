@@ -125,6 +125,11 @@ class ClientTest(unittest.TestCase):
                          FakeApi.last_path)
         with self.assertRaises(ValueError):
             self.client.recognize(b"img", person_box=[0.1, 0.2, 0.3])
+        self.client.recognize(b"img", cluster_strangers=True, event_id="1794372518.917899-f7uo07")
+        self.assertEqual("/api/recognize?cluster_strangers=true&event_id=1794372518.917899-f7uo07", FakeApi.last_path)
+        for bad in ["", "a b", "a/b", "x" * 65, "abc\n"]:
+            with self.assertRaises(ValueError):
+                self.client.recognize(b"img", event_id=bad)
 
     def test_stranger_admin(self):
         self.assertEqual("Person_03", self.client.strangers()[0]["name"])

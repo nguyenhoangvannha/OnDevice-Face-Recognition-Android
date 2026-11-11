@@ -216,6 +216,8 @@
     if ($("cluster-strangers").checked) query.set("cluster_strangers", "true");
     const box = $("person-box").value.trim();
     if (box) query.set("person_box", box);
+    const eventId = $("event-id").value.trim();
+    if (eventId) query.set("event_id", eventId);
     const qs = query.toString().replace(/%2C/g, ",");
     const path = "/api/recognize" + (qs ? "?" + qs : "");
     say($("recognize-msg"), "Recognizing…");
@@ -226,7 +228,8 @@
     say($("recognize-msg"),
       "inference_ms=" + data.inference_ms + " · roundtrip=" + roundtrip + " ms · faces=" + data.face_count +
       " · known=" + data.recognized_count + " · threshold=" + data.threshold +
-      (data.faces_outside_person_box ? " · outside person_box=" + data.faces_outside_person_box : ""), "ok");
+      (data.faces_outside_person_box ? " · outside person_box=" + data.faces_outside_person_box : "") +
+      (data.event_id ? " · event " + data.event_id + (data.event_repeat ? " (repeat, not counted again)" : " (new)") : ""), "ok");
     $("recognize-json").textContent = JSON.stringify(data, null, 2);
   }));
 
