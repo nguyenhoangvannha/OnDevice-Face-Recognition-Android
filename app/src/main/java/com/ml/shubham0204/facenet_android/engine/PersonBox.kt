@@ -64,4 +64,6 @@ object PersonBoxFilter {
 data class RecognizeOptions(
     val withLiveness: Boolean = false,
     val personBox: NormalizedBox? = null,
+    /** Match unknown faces against stranger clusters and create "Person_NN" clusters. */
+    val clusterStrangers: Boolean = false,
 )

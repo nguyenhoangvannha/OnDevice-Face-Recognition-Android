@@ -17,6 +17,10 @@ import com.ml.shubham0204.facenet_android.engine.FaceRecognitionEngine
 import com.ml.shubham0204.facenet_android.engine.ImageDecoding
 import com.ml.shubham0204.facenet_android.engine.PersonSummary
 import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
+import com.ml.shubham0204.facenet_android.coprocessor.server.StrangerSettingsResponse
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteResult
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteTarget
+import com.ml.shubham0204.facenet_android.engine.strangers.StrangerCluster
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Single
@@ -48,7 +52,7 @@ class AndroidCoprocessorBackend(
         withContext(Dispatchers.Default) {
             val (bitmap, decodeTime) = measureTimedValue { ImageDecoding.decode(image) }
             if (bitmap == null) throw InvalidImageException()
-            val result = engine.recognize(bitmap, settings.threshold, options)
+            val result = engine.recognize(bitmap, settings.threshold, options, settings.strangerThreshold)
             RecognizeOutcome(result, decodeTime.toLong(DurationUnit.MILLISECONDS))
         }
 
@@ -80,6 +84,27 @@ class AndroidCoprocessorBackend(
 
     override suspend fun deletePerson(personId: Long): Boolean = withContext(Dispatchers.IO) { engine.deletePerson(personId) }
 
+    override suspend fun listStrangers(): List<StrangerCluster> = withContext(Dispatchers.IO) { engine.strangers.list() }
+
+    override suspend fun promoteStranger(
+        strangerId: Long,
+        target: PromoteTarget,
+    ): PromoteResult = withContext(Dispatchers.IO) { engine.strangers.promote(strangerId, target) }
+
+    override suspend fun deleteStranger(strangerId: Long): Boolean = withContext(Dispatchers.IO) { engine.strangers.delete(strangerId) }
+
+    override suspend fun deleteAllStrangers(): Int = withContext(Dispatchers.IO) { engine.strangers.deleteAll() }
+
+    override fun getStrangerSettings(): StrangerSettingsResponse =
+        engine.strangers.limits.let {
+            StrangerSettingsResponse(settings.strangerThreshold, it.maxClusters, it.maxEmbeddingsPerCluster, it.minFacePx)
+        }
+
+    override fun setStrangerThreshold(value: Float): StrangerSettingsResponse {
+        settings.strangerThreshold = value
+        return getStrangerSettings()
+    }
+
     override fun getThreshold(): Float = settings.threshold
 
     override fun setThreshold(value: Float): Float {
@@ -109,6 +134,7 @@ class AndroidCoprocessorBackend(
                 inferenceBackend = backends.status.value.active?.wireName,
                 inferenceBackendRequested = backends.status.value.requested.wireName,
                 inferenceBackendFallbackReason = backends.status.value.fallbackReason,
+                strangers = engine.strangers.count().toLong(),
             )
         }
 }

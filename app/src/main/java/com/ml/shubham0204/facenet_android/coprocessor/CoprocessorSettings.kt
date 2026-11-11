@@ -48,6 +48,13 @@ class CoprocessorSettings(
             prefs.edit { putFloat(KEY_THRESHOLD, value.coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)) }
         }
 
+    /** Cosine threshold for matching an unknown face to a stranger cluster (`cluster_strangers=true`). */
+    var strangerThreshold: Float
+        get() = prefs.getFloat(KEY_STRANGER_THRESHOLD, DEFAULT_STRANGER_THRESHOLD).coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+        set(value) {
+            prefs.edit { putFloat(KEY_STRANGER_THRESHOLD, value.coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)) }
+        }
+
     /** Desired server state; the boot receiver only starts the server when this is true. */
     var serverEnabled: Boolean
         get() = prefs.getBoolean(KEY_ENABLED, false)
@@ -75,6 +82,10 @@ class CoprocessorSettings(
         const val PREFS_NAME = "coprocessor_settings"
         const val DEFAULT_PORT = 8080
         const val DEFAULT_THRESHOLD = 0.70f
+
+        // Same as the household default: on 2026-11-11 data two different household members reached 0.684,
+        // so a lower value would merge different people into one cluster.
+        const val DEFAULT_STRANGER_THRESHOLD = 0.70f
         const val MIN_THRESHOLD = 0.0f
         const val MAX_THRESHOLD = 1.0f
         const val BIND_HOST = "0.0.0.0"
@@ -83,6 +94,7 @@ class CoprocessorSettings(
         private const val KEY_TOKEN = "api_token"
         private const val KEY_PORT = "port"
         private const val KEY_THRESHOLD = "threshold"
+        private const val KEY_STRANGER_THRESHOLD = "stranger_threshold"
         private const val KEY_ENABLED = "server_enabled"
         private const val KEY_BACKEND = "inference_backend"
         private const val KEY_PENDING_PROBE = "inference_backend_pending_probe"
