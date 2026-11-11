@@ -570,6 +570,24 @@ class FaceApiModuleTest {
         }
 
     @Test
+    fun webPageHasStrangerScreenAndNeverInjectsHtml() =
+        api {
+            val html = client.get("/").bodyAsText()
+            for (id in listOf("strangers-section", "strangers", "strangers-refresh", "strangers-delete-all", "stranger-threshold")) {
+                assertTrue("missing #$id", html.contains("id=\"$id\""))
+            }
+            val js = client.get("/app.js").bodyAsText()
+            for (endpoint in listOf("/api/strangers", "/promote", "/api/settings/strangers")) {
+                assertTrue("app.js should call $endpoint", js.contains(endpoint))
+            }
+            // Names come from the server: only textContent, never HTML parsing.
+            for (sink in listOf("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write")) {
+                assertFalse("app.js uses $sink", js.contains(sink))
+            }
+            assertFalse("no external URLs in app.js", Regex("https?://").containsMatchIn(js))
+        }
+
+    @Test
     fun noCorsHeadersEvenWithOrigin() =
         api {
             val res =

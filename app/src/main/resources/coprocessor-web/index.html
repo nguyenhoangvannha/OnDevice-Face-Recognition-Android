@@ -74,6 +74,25 @@
   <p id="persons-msg" class="muted"></p>
 </section>
 
+<section id="strangers-section">
+  <h2>Strangers</h2>
+  <p class="muted">Unknown faces grouped by <code>cluster_strangers=true</code> (embeddings only, no images). Assign a group to a
+    known person, or name it to create a new person. Only name people who agreed.</p>
+  <form id="stranger-settings-form">
+    <label>Stranger threshold <input id="stranger-threshold" type="number" min="0" max="1" step="0.01" required></label>
+    <button type="submit">Save</button>
+    <span id="stranger-limits" class="muted"></span>
+  </form>
+  <p id="stranger-settings-msg" class="muted"></p>
+  <button type="button" id="strangers-refresh">Refresh</button>
+  <button type="button" id="strangers-delete-all">Delete all</button>
+  <table>
+    <thead><tr><th>Name</th><th>Seen</th><th>Embeddings</th><th>First seen</th><th>Last seen</th><th>Assign / name</th><th></th></tr></thead>
+    <tbody id="strangers"></tbody>
+  </table>
+  <p id="strangers-msg" class="muted"></p>
+</section>
+
 <section>
   <h2>Enroll new person</h2>
   <form id="enroll-form">
