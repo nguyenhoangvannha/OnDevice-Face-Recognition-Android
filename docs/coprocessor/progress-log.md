@@ -174,3 +174,12 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
 - Đã xem, không làm: `noCompress` cho `model.pte` (APK +6.8 MB, app copy ra `filesDir` nên không lợi), R8 (cần keep rule cho
   Koin/Ktor/ObjectBox/JNI, chưa thử được trên máy thật), tài nguyên (~0.3 MB).
 - Chưa: cài bản arm64 lên Xperia; chưa chạy release trên GitHub (không tạo tag theo yêu cầu).
+
+## 2026-11-11 — Thử thật trên Xperia với ảnh Frigate
+
+- PR #2 đã được anh merge (`dc52d52` trên `main`).
+- Đăng ký 7 người từ thư viện khuôn mặt Frigate gia đình (tên = tên thư mục), 32 embedding. Không dùng cụm người lạ, ảnh `train/` hay camera riêng.
+- Crop Frigate quá sát mặt → app từ chối (`Face detection failed`, bbox ra ngoài ảnh). Thêm viền phía client thì qua. Nên sửa app: clamp bbox.
+- Ảnh giữ lại: 13/13 đúng người (cosine 0.568–0.892). Người lạ (bỏ tạm từng người): 0.307–0.684. Ngưỡng 0.40 đang đặt nhận nhầm 28/33; 0.70 → 0/33 nhưng bỏ lỡ 4/13. Khuyến nghị 0.65–0.70, chưa đổi.
+- Độ trễ CPU: toàn trình trung vị 422 ms, suy luận 361 ms (ML Kit 218 ms, FaceNet 138 ms). Chưa thử GPU.
+- Chi tiết: [testing.md](testing.md).
