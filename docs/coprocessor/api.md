@@ -95,6 +95,9 @@ curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
 ```
 
 - `recognized = similarity >= threshold`. `person_id`/`name` chỉ có khi `recognized`.
+- `bbox` luôn nằm trong ảnh: khung ML Kit vượt ra ngoài ảnh được **kẹp** vào trong (từ nhánh `fix/clamp-face-box`). Một mặt
+  chỉ bị bỏ (không có trong `faces`) khi sau khi kẹp còn cạnh < 20 px hoặc còn < 50% diện tích khung phát hiện. Trước đây mọi
+  mặt có khung chạm/vượt mép ảnh đều bị bỏ âm thầm.
 - `similarity` là cosine của embedding gần nhất (0 nếu DB rỗng).
 - `inference_ms` = detection + embedding + search (+ spoof), không tính decode và mạng.
 - Không có mặt nào: `faces: []`, `face_count: 0` (vẫn `200`).
@@ -119,6 +122,10 @@ curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
 {"person_id": 2, "name": "An", "images_accepted": 1,
  "images_rejected": [{"index": 1, "reason": "Multiple faces found in the image"}]}
 ```
+
+Lý do từ chối một ảnh (`images_rejected[].reason`): `No faces were in the image`, `Multiple faces found in the image`,
+`Face is too small or mostly outside the image` (sau khi kẹp khung: cạnh < 20 px hoặc < 50% khung nằm trong ảnh; trước bản sửa
+mọi khung chạm/vượt mép ảnh đều trả `Face detection failed`), `Face detection failed` (lỗi khác).
 
 Lỗi khác: `400 invalid_name`, `400 missing_image`, `400 too_many_images`, `400 invalid_image` (một ảnh không decode được → không lưu gì), `413`, `415`, `401`.
 
