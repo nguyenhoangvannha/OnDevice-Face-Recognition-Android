@@ -176,8 +176,11 @@ curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" -F "image=@frame2.jpg" \
 - Nhận diện người nhà chạy bình thường với mọi frame; `event_id` chỉ đổi cách gom người lạ:
   - Một cụm chỉ được +1 `appearances` **một lần cho mỗi event**. Frame sau của cùng event vẫn trả `seen` + `appearances`
     hiện tại, cập nhật `last_seen_ms`.
-  - Frame sau chỉ **thêm embedding** vào cụm khi mặt **nét hơn** (`sharpness` lớn hơn) mặt nét nhất mà event này đã lưu vào
-    cụm đó. Giới hạn 10 embedding mỗi cụm vẫn áp dụng (bỏ cái cũ nhất).
+  - Mỗi event giữ **tối đa một ô embedding** trong mỗi cụm. Frame sau chỉ **thay** embedding của ô đó khi mặt **nét hơn**
+    (`sharpness` lớn hơn) mặt đang lưu; không thêm embedding mới. Ô giữ nguyên tuổi khi bị thay, nên một event không đẩy
+    embedding của event khác ra khỏi giới hạn 10. Không có `event_id`: mỗi request thêm một embedding, đủ 10 thì bỏ cái cũ nhất.
+  - Ô gắn với **mục event trong RAM** (khoá ngẫu nhiên mỗi lần tạo mục): event hết hạn, bị LRU bỏ hoặc app khởi động lại thì
+    cùng `event_id` được coi là event mới, có ô mới (ô cũ ở lại như embedding thường, theo giới hạn 10).
   - Event lặp lại mà mặt không khớp cụm nào (dưới ngưỡng, vd. quay nghiêng) → gán vào cụm **gần nhất trong các cụm của
     event đó** thay vì tạo `Person_NN` mới (một event Frigate theo dõi một người; dùng kèm `person_box` để chỉ còn mặt của
     người đó). Frame đầu tiên của event vẫn có thể tạo nhiều cụm nếu ảnh có nhiều người lạ.

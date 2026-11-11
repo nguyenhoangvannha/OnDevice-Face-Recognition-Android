@@ -223,3 +223,11 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
   lại không tạo cụm mới. Nhớ event trong RAM (LRU 1.000, TTL 24 giờ); khởi động lại thì quên.
 - Client Python `event_id=` / `--event-id`; trang web có ô `event_id`.
 - 92/92 test JVM, 10/10 Python, debug + release build qua, Chrome headless 17/17. Chưa thử trên điện thoại.
+
+## 2026-11-11 — Một ô embedding mỗi event (trên `main`)
+
+- Anh merge PR #6 và cho làm thẳng trên `main`.
+- Mỗi event giữ tối đa một embedding trong mỗi cụm người lạ (`StrangerEmbeddingRecord.slotKey`, trường ObjectBox mới, migrate tự
+  động). Frame nét hơn của cùng event **thay** embedding đó thay vì thêm; một event không còn đẩy embedding của event khác ra.
+  Khoá ô sinh mới mỗi mục event trong RAM, nên hết hạn / khởi động lại → ô mới. Không `event_id`: như cũ.
+- 95/95 test JVM, debug + release build qua. Chưa thử trên điện thoại.
