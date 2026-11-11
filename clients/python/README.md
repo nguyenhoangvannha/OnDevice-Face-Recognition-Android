@@ -18,7 +18,8 @@ export XPERIA_FACE_URL=http://<ip-điện-thoại>:8080
 export XPERIA_FACE_TOKEN=...            # dán từ dashboard, không lưu vào lịch sử shell nếu được
 python3 xperia_face_client.py health
 python3 xperia_face_client.py recognize snapshot.jpg
-python3 xperia_face_client.py recognize snapshot.jpg --person-box 0.41,0.22,0.12,0.55 --cluster-strangers
+python3 xperia_face_client.py recognize snapshot.jpg --person-box 0.41,0.22,0.12,0.55 --cluster-strangers \
+        --event-id 1794372518.917899-f7uo07
 python3 xperia_face_client.py strangers
 python3 xperia_face_client.py promote 3 --name "An"      # hoặc --person-id 9
 python3 xperia_face_client.py delete-stranger 3
@@ -39,6 +40,7 @@ if result:
 ```
 
 Recognize v2 (xem api.md): `client.recognize(img, person_box=event["data"]["box"], cluster_strangers=True)`.
+Thêm `event_id=event["id"]` để nhiều frame của cùng event không đếm `appearances` hai lần (response có `event_repeat`).
 `person_box` là `[x, y, w, h]` chuẩn hoá 0..1 (đúng định dạng `data.box` của Frigate). Người lạ có
 `is_stranger=true`, `name="Person_NN"`, nhưng `recognized` vẫn `false`. Quản lý: `strangers()`,
 `promote_stranger(id, name=... | person_id=...)`, `delete_stranger(id)`, `delete_all_strangers()`,

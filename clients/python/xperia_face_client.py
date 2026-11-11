@@ -15,6 +15,7 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import socket
 import sys
 import time
@@ -67,9 +68,10 @@ class XperiaFaceClient:
 
     def recognize(self, image: ImageInput, liveness: bool = False,
                   person_box: Optional[Sequence[float]] = None,
-                  cluster_strangers: bool = False) -> dict:
+                  cluster_strangers: bool = False, event_id: Optional[str] = None) -> dict:
         """person_box: normalized [x, y, w, h] (e.g. Frigate event data.box); only faces inside it are kept.
-        cluster_strangers: unknown faces get a persistent Person_NN label (is_stranger=true)."""
+        cluster_strangers: unknown faces get a persistent Person_NN label (is_stranger=true).
+        event_id: e.g. the Frigate event id; frames of the same event are not counted twice (event_repeat)."""
         query = []
         if liveness:
             query.append(("liveness", "true"))
@@ -77,6 +79,10 @@ class XperiaFaceClient:
             query.append(("person_box", format_person_box(person_box)))
         if cluster_strangers:
             query.append(("cluster_strangers", "true"))
+        if event_id is not None:
+            if not _EVENT_ID.match(event_id):
+                raise ValueError("event_id must be 1..64 chars of A-Z a-z 0-9 . _ : -")
+            query.append(("event_id", event_id))
         body, content_type = _multipart([], [("image", _load(image))])
         path = "/api/recognize" + ("?" + urllib.parse.urlencode(query, safe=",") if query else "")
         return self._request("POST", path, body, content_type)
@@ -146,6 +152,9 @@ class XperiaFaceClient:
         return json.loads(raw.decode("utf-8")) if raw else {}
 
 
+_EVENT_ID = re.compile(r"^[A-Za-z0-9._:-]{1,64}\Z")
+
+
 def format_person_box(box: Sequence[float]) -> str:
     """[x, y, w, h] in 0..1 -> "x,y,w,h" (validated again by the server)."""
     values = [float(v) for v in box]
@@ -180,7 +189,8 @@ def _multipart(fields, files) -> Tuple[bytes, str]:
 def recognize_snapshot(image: ImageInput, liveness: bool = False,
                        client: Optional[XperiaFaceClient] = None,
                        person_box: Optional[Sequence[float]] = None,
-                       cluster_strangers: bool = False) -> Optional[dict]:
+                       cluster_strangers: bool = False,
+                       event_id: Optional[str] = None) -> Optional[dict]:
     """Event-pipeline helper: returns the result, or None on timeout, network or API error.
 
     The caller should treat None as "unknown person" and never block an alert on it.
@@ -189,7 +199,7 @@ def recognize_snapshot(image: ImageInput, liveness: bool = False,
     try:
         client = client or XperiaFaceClient()
         result = client.recognize(image, liveness=liveness, person_box=person_box,
-                                  cluster_strangers=cluster_strangers)
+                                  cluster_strangers=cluster_strangers, event_id=event_id)
     except (CoprocessorError, urllib.error.URLError, socket.timeout, OSError, ValueError) as e:
         print("[xperia-face] failed after %.0f ms: %s" % ((time.monotonic() - started) * 1000, e),
               file=sys.stderr)
@@ -211,6 +221,7 @@ def main(argv=None) -> int:
     p.add_argument("--liveness", action="store_true")
     p.add_argument("--person-box", help="x,y,w,h normalized, e.g. Frigate data.box")
     p.add_argument("--cluster-strangers", action="store_true")
+    p.add_argument("--event-id", help="e.g. Frigate event id; repeated frames are not counted twice")
     sub.add_parser("strangers")
     p = sub.add_parser("promote")
     p.add_argument("stranger_id", type=int)
@@ -240,7 +251,7 @@ def main(argv=None) -> int:
         elif args.cmd == "recognize":
             box = [float(v) for v in args.person_box.split(",")] if args.person_box else None
             out = client.recognize(args.image, liveness=args.liveness, person_box=box,
-                                   cluster_strangers=args.cluster_strangers)
+                                   cluster_strangers=args.cluster_strangers, event_id=args.event_id)
         elif args.cmd == "strangers":
             out = client.strangers()
         elif args.cmd == "promote":
