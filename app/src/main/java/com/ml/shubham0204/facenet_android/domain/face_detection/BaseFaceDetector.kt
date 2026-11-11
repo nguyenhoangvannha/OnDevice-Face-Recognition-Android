@@ -70,14 +70,12 @@ abstract class BaseFaceDetector {
         return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, false)
     }
 
-    // Check if the bounds of `boundingBox` fit within the
-    // limits of `cameraFrameBitmap`
-    protected fun validateRect(
-        cameraFrameBitmap: Bitmap,
+    // Clamps `boundingBox` into `image`; null when too little of the face is left (see FaceBoxClamp)
+    protected fun clampToImage(
+        image: Bitmap,
         boundingBox: Rect,
-    ): Boolean =
-        boundingBox.left >= 0 &&
-                boundingBox.top >= 0 &&
-                (boundingBox.left + boundingBox.width()) < cameraFrameBitmap.width &&
-                (boundingBox.top + boundingBox.height()) < cameraFrameBitmap.height
+    ): Rect? =
+        FaceBoxClamp
+            .clamp(boundingBox.left, boundingBox.top, boundingBox.right, boundingBox.bottom, image.width, image.height)
+            ?.let { Rect(it.left, it.top, it.right, it.bottom) }
 }
