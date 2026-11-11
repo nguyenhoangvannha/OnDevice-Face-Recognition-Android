@@ -135,3 +135,49 @@ Kết luận: ở 0.40, gần như mọi người lạ sẽ bị gán tên một
 
 Chưa đạt tiêu chí (< 100 ms suy luận, < 350 ms toàn trình). Phần lớn là ML Kit chế độ ACCURATE. Chưa thử GPU (Vulkan).
 Pin 32.9–33.9 °C, thermal `none` (đang sạc).
+
+## 2026-11-11 (2) — Ngưỡng 0.70, GPU (Vulkan), sửa kẹp khung mặt
+
+Ngưỡng đặt qua `PUT /api/settings/threshold` = **0.70** (GET trả 0.7). Anh đã bật GPU: `/api/status` báo
+`inference_backend: gpu`, requested `gpu`, `fallback_reason: null`; `/api/settings/backend` phase `ready`.
+
+### Độ trễ GPU (cùng ảnh Thao như lần CPU, 10 lần)
+
+| | CPU (sáng nay) | GPU lần 1 | GPU lần 2 (6 lần, vài phút sau) |
+| --- | ---: | ---: | ---: |
+| Toàn trình (curl, Wi-Fi) | 422 ms | 243 ms (217–279) | — |
+| `inference_ms` | 361 ms | 172 ms (154–186) | ~330 ms |
+| Phát hiện mặt (ML Kit, luôn CPU) | 218 ms | 66 ms (45–80) | 211–233 ms |
+| Embedding FaceNet | 138 ms (XNNPACK) | 105 ms (104–108, Vulkan) | 112–119 ms |
+
+GPU chỉ bớt ~30 ms ở phần embedding. Thời gian ML Kit dao động 3 lần giữa hai đợt đo cách nhau vài phút (có lẽ do
+CPU governor/màn hình), nên con số toàn trình chưa ổn định; cần đo dài hơn. Cosine của ảnh đã đăng ký (embedding CPU)
+gửi lại qua GPU = 1.000, nên embedding GPU khớp CPU.
+
+### Ảnh "giữ lại" ở ngưỡng 0.70
+
+Các ảnh giữ lại hôm trước đã được thêm vào DB sau lần đo, nên giờ trả cosine 1.000 (không còn là ảnh giữ lại). Thay vào đó
+dùng crop **mới** trong `train/` của Frigate từ **camera gia đình** (`camera_que_2`; bỏ các crop từ camera `*_private`),
+nhãn là Frigate đoán (0.92–0.99), đã xem bằng mắt cho hợp lý. Không xoá/đăng ký lại ai.
+
+| Ảnh | Nguyên crop (app hiện tại) | Thêm viền |
+| --- | --- | --- |
+| Gia_Han #1 | **Em_be_t 0.713 (nhầm)** | không nhận (0.697) |
+| Gia_Han #2 | Gia_Han 0.744 | **Em_be_t 0.750 (nhầm)** |
+| Gia_Han #3 | Gia_Han 0.709 | Gia_Han 0.732 |
+| Me #1..3 | không thấy mặt | Me 0.711, Me 0.721, không nhận (0.661) |
+| Em_be_t (mờ, nửa mặt) | không thấy mặt | không thấy mặt |
+| Snapshot rộng `camera_que_2` (event Frigate gắn Gia_Han) | **Em_be_t 0.758 (nhầm)**, mặt 37×49 px | — |
+| 3 snapshot rộng khác (`camera_que_1/2`) | không thấy mặt | — |
+
+Kết luận: 0.70 vẫn để lọt nhầm giữa hai bé (Gia_Han ↔ Em_be_t, 0.71–0.76). Ngưỡng không giải quyết được; cần thêm ảnh
+đăng ký cho hai bé (nhiều góc, nhiều tuổi) và cân nhắc luật khoảng cách top-1/top-2. Snapshot toàn khung camera có mặt quá
+nhỏ (2304×1296, mặt ~40 px) để nhận diện tin cậy; nên gửi crop người (bbox `person` của Frigate) thay vì cả khung.
+
+### Sửa kẹp khung mặt (nhánh `fix/clamp-face-box`, chưa cài lên máy)
+
+`FaceBoxClamp`: khung ML Kit được kẹp vào ảnh; chỉ bỏ khi cạnh sau kẹp < 20 px hoặc phần trong ảnh < 50% diện tích khung.
+Áp cho cả enroll (`getCroppedFace`) và recognize (`getAllCroppedFaces`, cũng là đường camera trực tiếp). Lý do từ chối mới:
+`Face is too small or mostly outside the image`. 9 unit test mới (`FaceBoxClampTest`); tổng 48 test qua.
+Cần kiểm lại trên máy sau khi cài: các crop Frigate nguyên bản trong `~/Downloads/xperia-face-test/` phải được nhận
+mà không cần thêm viền.
