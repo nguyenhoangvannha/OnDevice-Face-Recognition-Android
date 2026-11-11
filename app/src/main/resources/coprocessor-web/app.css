@@ -18,3 +18,6 @@ dt { color: #888; }
 dd { margin: 0; }
 
 label.option { display: block; margin: 0.25rem 0; }
+
+.stranger-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.stranger-actions select, .stranger-actions input { min-width: 9em; padding: 4px; }

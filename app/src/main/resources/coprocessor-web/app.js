@@ -231,8 +231,11 @@
   }));
 
   // --- persons ---
+  let personsCache = [];
   const loadPersons = guarded($("persons-msg"), async () => {
     const { data } = await api("GET", "/api/persons");
+    personsCache = data.persons;
+    fillPersonSelects();
     const body = $("persons");
     const select = $("add-person");
     body.replaceChildren();
@@ -292,12 +295,137 @@
     await loadPersons();
   }));
 
+  // --- strangers ---
+  function cell(text) {
+    const td = document.createElement("td");
+    td.textContent = text;
+    return td;
+  }
+  function when(ms) { return ms ? new Date(ms).toLocaleString() : "?"; }
+
+  function personOptions(select) {
+    const keep = select.value;
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "existing person…";
+    select.replaceChildren(placeholder);
+    personsCache.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = String(p.person_id);
+      opt.textContent = p.name + " (id " + p.person_id + ")";
+      select.append(opt);
+    });
+    select.value = personsCache.some((p) => String(p.person_id) === keep) ? keep : "";
+  }
+  function fillPersonSelects() {
+    document.querySelectorAll("select.stranger-person").forEach(personOptions);
+  }
+
+  async function promote(stranger, body) {
+    const { data } = await api("POST", "/api/strangers/" + encodeURIComponent(stranger.stranger_id) + "/promote", body);
+    const verb = data.created ? "Created " + data.name + " (id " + data.person_id + ")"
+      : "Added to " + data.name + " (id " + data.person_id + ")";
+    await loadPersons();
+    await loadStrangers();
+    say($("strangers-msg"), data.stranger_name + " → " + verb + ", " + data.embeddings_moved + " embedding(s)", "ok");
+  }
+
+  function strangerRow(s) {
+    const msg = $("strangers-msg");
+    const tr = document.createElement("tr");
+    tr.append(cell(s.name), cell(String(s.appearances)), cell(String(s.num_embeddings)),
+      cell(when(s.first_seen_ms)), cell(when(s.last_seen_ms)));
+
+    const actions = document.createElement("div");
+    actions.className = "stranger-actions";
+    const select = document.createElement("select");
+    select.className = "stranger-person";
+    select.setAttribute("aria-label", "Assign " + s.name + " to a known person");
+    personOptions(select);
+    const assign = document.createElement("button");
+    assign.type = "button";
+    assign.textContent = "Assign";
+    assign.addEventListener("click", guarded(msg, async () => {
+      const person = personsCache.find((p) => String(p.person_id) === select.value);
+      if (!person) throw new Error("Choose a known person for " + s.name + " (refresh Persons first)");
+      if (!window.confirm("Move " + s.name + " (" + s.num_embeddings + " embedding(s)) into " + person.name + " (id " + person.person_id + ")?")) return;
+      await promote(s, { person_id: person.person_id });
+    }));
+    const name = document.createElement("input");
+    name.maxLength = 64;
+    name.placeholder = "new person name";
+    name.setAttribute("aria-label", "New person name for " + s.name);
+    const create = document.createElement("button");
+    create.type = "button";
+    create.textContent = "Create";
+    create.addEventListener("click", guarded(msg, async () => {
+      const value = name.value.trim();
+      if (!value) throw new Error("Type a name for " + s.name);
+      const same = personsCache.filter((p) => p.name === value);
+      if (same.length > 1) throw new Error("Several persons are named " + value + "; use Assign instead");
+      const question = same.length === 1
+        ? value + " already exists (id " + same[0].person_id + "). Add " + s.name + " to that person?"
+        : "Create new person " + value + " from " + s.name + "?";
+      if (!window.confirm(question)) return;
+      await promote(s, { name: value });
+    }));
+    actions.append(select, assign, name, create);
+    const actionsTd = document.createElement("td");
+    actionsTd.append(actions);
+
+    const delTd = document.createElement("td");
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", guarded(msg, async () => {
+      if (!window.confirm("Delete " + s.name + " and its " + s.num_embeddings + " embedding(s)?")) return;
+      await api("DELETE", "/api/strangers/" + encodeURIComponent(s.stranger_id));
+      await loadStrangers();
+      say(msg, "Deleted " + s.name, "ok");
+    }));
+    delTd.append(del);
+    tr.append(actionsTd, delTd);
+    return tr;
+  }
+
+  const loadStrangers = guarded($("strangers-msg"), async () => {
+    const { data } = await api("GET", "/api/strangers");
+    $("strangers").replaceChildren(...data.strangers.map(strangerRow));
+    say($("strangers-msg"), data.count + " / " + data.max_clusters + " stranger group(s)");
+  });
+  $("strangers-refresh").addEventListener("click", loadStrangers);
+  $("strangers-delete-all").addEventListener("click", guarded($("strangers-msg"), async () => {
+    if (!window.confirm("Delete ALL stranger groups and their embeddings?")) return;
+    const { data } = await api("DELETE", "/api/strangers");
+    await loadStrangers();
+    say($("strangers-msg"), "Deleted " + data.deleted + " group(s)", "ok");
+  }));
+
+  function showStrangerSettings(data) {
+    $("stranger-threshold").value = data.threshold.toFixed(2);
+    $("stranger-limits").textContent = "max " + data.max_clusters + " groups × " + data.max_embeddings_per_cluster +
+      " embeddings · faces < " + data.min_face_px + " px skipped";
+  }
+  const loadStrangerSettings = guarded($("stranger-settings-msg"), async () => {
+    const { data } = await api("GET", "/api/settings/strangers");
+    showStrangerSettings(data);
+  });
+  $("stranger-settings-form").addEventListener("submit", guarded($("stranger-settings-msg"), async () => {
+    const value = parseFloat($("stranger-threshold").value);
+    if (!(value >= 0 && value <= 1)) throw new Error("Threshold must be between 0 and 1");
+    const { data } = await api("PUT", "/api/settings/strangers", { threshold: value });
+    showStrangerSettings(data);
+    say($("stranger-settings-msg"), "Saved: " + data.threshold.toFixed(2), "ok");
+  }));
+
   function refreshAll() {
     if (!getToken()) return;
     loadStatus();
     loadThreshold();
     loadBackend();
     loadPersons();
+    loadStrangers();
+    loadStrangerSettings();
   }
 
   showTokenState();
