@@ -217,7 +217,7 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
 
 ## 2026-11-11 — `event_id` chống đếm trùng (nhánh `feature/event-id`)
 
-- Anh duyệt `event_id`. Nhánh dựa trên `feature/web-strangers` (cùng sửa `app.js` và tài liệu) nên PR chứa cả commit của PR #5.
+- Anh duyệt `event_id`. Nhánh dựa trên `feature/web-strangers`; sau khi anh merge PR #5 đã merge `main` vào nhánh (không force-push).
 - `POST /api/recognize?event_id=...` (1..64 ký tự `A-Za-z0-9._:-`, sai → `400 invalid_event_id`); response có `event_id`,
   `event_repeat`. Mỗi cụm người lạ chỉ +1 `appearances` một lần mỗi event; frame sau chỉ thêm embedding khi nét hơn; event lặp
   lại không tạo cụm mới. Nhớ event trong RAM (LRU 1.000, TTL 24 giờ); khởi động lại thì quên.
