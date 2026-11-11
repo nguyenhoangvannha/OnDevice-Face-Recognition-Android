@@ -26,6 +26,22 @@ data class RecognizedFace(
     val spoof: SpoofInfo? = null,
     /** Variance of the Laplacian of the face crop (see [Sharpness]); null when not computed. */
     val sharpness: Float? = null,
+    /** Null when stranger clustering was not requested. */
+    val stranger: StrangerInfo? = null,
+)
+
+/** Stranger-clustering outcome of one face. */
+data class StrangerInfo(
+    /** False when the face matched a household person. */
+    val isStranger: Boolean,
+    val strangerId: Long? = null,
+    /** "Person_NN". */
+    val label: String? = null,
+    /** "new" | "seen" | "too_small"; null when [isStranger] is false. */
+    val status: String? = null,
+    val appearances: Long? = null,
+    /** Cosine similarity to the nearest stranger cluster. */
+    val similarity: Float? = null,
 )
 
 data class RecognitionTimings(
@@ -34,6 +50,7 @@ data class RecognitionTimings(
     val searchMs: Long,
     val spoofMs: Long,
     val sharpnessMs: Long = 0,
+    val strangerMs: Long = 0,
 )
 
 data class RecognitionResult(

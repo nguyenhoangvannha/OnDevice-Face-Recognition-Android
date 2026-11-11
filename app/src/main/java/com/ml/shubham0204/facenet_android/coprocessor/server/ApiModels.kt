@@ -6,6 +6,7 @@ import com.ml.shubham0204.facenet_android.engine.RecognitionResult
 import com.ml.shubham0204.facenet_android.engine.backend.BackendStatus
 import com.ml.shubham0204.facenet_android.engine.backend.ModelSource
 import com.ml.shubham0204.facenet_android.engine.backend.ModelSpec
+import com.ml.shubham0204.facenet_android.engine.strangers.StrangerCluster
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -76,6 +77,8 @@ data class StatusResponse(
     @SerialName("inference_backend") val inferenceBackend: String? = null,
     @SerialName("inference_backend_requested") val inferenceBackendRequested: String? = null,
     @SerialName("inference_backend_fallback_reason") val inferenceBackendFallbackReason: String? = null,
+    /** Stranger clusters stored (cluster_strangers). */
+    val strangers: Long? = null,
 )
 
 @Serializable
@@ -102,6 +105,13 @@ data class FaceDto(
     val spoof: SpoofDto? = null,
     /** Variance of the Laplacian on the 112x112 grayscale face crop, 1 decimal. */
     val sharpness: Float? = null,
+    /** Null unless cluster_strangers=true; false for household matches. */
+    @SerialName("is_stranger") val isStranger: Boolean? = null,
+    @SerialName("stranger_id") val strangerId: Long? = null,
+    /** new | seen | too_small */
+    @SerialName("stranger_status") val strangerStatus: String? = null,
+    val appearances: Long? = null,
+    @SerialName("stranger_similarity") val strangerSimilarity: Float? = null,
 )
 
 @Serializable
@@ -112,6 +122,7 @@ data class TimingsDto(
     @SerialName("search_ms") val searchMs: Long,
     @SerialName("spoof_ms") val spoofMs: Long,
     @SerialName("sharpness_ms") val sharpnessMs: Long = 0,
+    @SerialName("stranger_ms") val strangerMs: Long = 0,
 )
 
 @Serializable
@@ -244,11 +255,17 @@ fun RecognizeOutcome.toResponse(): RecognizeResponse =
                 FaceDto(
                     bbox = BoxDto(it.box.left, it.box.top, it.box.right, it.box.bottom),
                     personId = it.personId,
-                    name = it.name,
+                    // Strangers are named after their cluster; household fields keep their v1 meaning.
+                    name = it.name ?: it.stranger?.label,
                     similarity = it.similarity,
                     recognized = it.isRecognized,
                     spoof = it.spoof?.let { s -> SpoofDto(s.isSpoof, s.score) },
                     sharpness = it.sharpness?.let { v -> Math.round(v * 10.0) / 10.0f },
+                    isStranger = it.stranger?.isStranger,
+                    strangerId = it.stranger?.strangerId,
+                    strangerStatus = it.stranger?.status,
+                    appearances = it.stranger?.appearances,
+                    strangerSimilarity = it.stranger?.similarity,
                 )
             },
         faceCount = result.faces.size,
@@ -263,6 +280,7 @@ fun RecognizeOutcome.toResponse(): RecognizeResponse =
                 searchMs = result.timings.searchMs,
                 spoofMs = result.timings.spoofMs,
                 sharpnessMs = result.timings.sharpnessMs,
+                strangerMs = result.timings.strangerMs,
             ),
         imageWidth = result.imageWidth,
         imageHeight = result.imageHeight,
@@ -279,3 +297,56 @@ fun EnrollResult.toResponse(): EnrollResponse =
     )
 
 fun PersonSummary.toDto(): PersonDto = PersonDto(personId, name, numImages, addTimeMillis)
+
+@Serializable
+data class StrangerDto(
+    @SerialName("stranger_id") val strangerId: Long,
+    val name: String,
+    val appearances: Long,
+    @SerialName("num_embeddings") val numEmbeddings: Int,
+    @SerialName("first_seen_ms") val firstSeenMs: Long,
+    @SerialName("last_seen_ms") val lastSeenMs: Long,
+)
+
+@Serializable
+data class StrangersResponse(
+    val strangers: List<StrangerDto>,
+    val count: Int,
+    @SerialName("max_clusters") val maxClusters: Int,
+)
+
+@Serializable
+data class PromoteRequest(
+    val name: String? = null,
+    @SerialName("person_id") val personId: Long? = null,
+)
+
+@Serializable
+data class PromoteResponse(
+    @SerialName("stranger_id") val strangerId: Long,
+    @SerialName("stranger_name") val strangerName: String,
+    @SerialName("person_id") val personId: Long,
+    val name: String,
+    val created: Boolean,
+    @SerialName("embeddings_moved") val embeddingsMoved: Int,
+)
+
+@Serializable
+data class StrangerSettingsResponse(
+    val threshold: Float,
+    @SerialName("max_clusters") val maxClusters: Int,
+    @SerialName("max_embeddings_per_cluster") val maxEmbeddingsPerCluster: Int,
+    @SerialName("min_face_px") val minFacePx: Int,
+)
+
+@Serializable
+data class StrangerSettingsRequest(
+    val threshold: Float,
+)
+
+@Serializable
+data class DeleteAllResponse(
+    val deleted: Int,
+)
+
+fun StrangerCluster.toDto(): StrangerDto = StrangerDto(id, label, appearances, numEmbeddings, firstSeenMs, lastSeenMs)

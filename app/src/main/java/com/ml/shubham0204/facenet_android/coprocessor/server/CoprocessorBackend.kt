@@ -4,6 +4,9 @@ import com.ml.shubham0204.facenet_android.engine.EnrollResult
 import com.ml.shubham0204.facenet_android.engine.PersonSummary
 import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
 import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteResult
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteTarget
+import com.ml.shubham0204.facenet_android.engine.strangers.StrangerCluster
 
 /** What the REST layer needs from the app. Faked in JVM tests. */
 interface CoprocessorBackend {
@@ -47,4 +50,22 @@ interface CoprocessorBackend {
      * @throws com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableException
      */
     fun selectBackend(backend: InferenceBackend): BackendSettingsResponse
+
+    /** Stranger clusters, most recently seen first. */
+    suspend fun listStrangers(): List<StrangerCluster>
+
+    suspend fun promoteStranger(
+        strangerId: Long,
+        target: PromoteTarget,
+    ): PromoteResult
+
+    /** Returns false when the cluster does not exist. */
+    suspend fun deleteStranger(strangerId: Long): Boolean
+
+    /** Returns the number of clusters deleted. */
+    suspend fun deleteAllStrangers(): Int
+
+    fun getStrangerSettings(): StrangerSettingsResponse
+
+    fun setStrangerThreshold(value: Float): StrangerSettingsResponse
 }

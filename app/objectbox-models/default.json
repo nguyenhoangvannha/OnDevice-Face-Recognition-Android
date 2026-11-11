@@ -64,10 +64,98 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "3:1453283011857853413",
+      "lastPropertyId": "4:3406333550058260436",
+      "name": "StrangerEmbeddingRecord",
+      "properties": [
+        {
+          "id": "1:6219562386948175712",
+          "name": "recordID",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5735935456402715525",
+          "name": "strangerID",
+          "indexId": "3:8145972003699984140",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:7688341188319175935",
+          "name": "addedMs",
+          "type": 6
+        },
+        {
+          "id": "4:3406333550058260436",
+          "name": "embedding",
+          "indexId": "4:411340918049962971",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:1621005774620134659",
+      "lastPropertyId": "5:422050776180330895",
+      "name": "StrangerRecord",
+      "properties": [
+        {
+          "id": "1:1690931891934642584",
+          "name": "strangerID",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7651429850061120080",
+          "name": "number",
+          "type": 5
+        },
+        {
+          "id": "3:7124695462733519387",
+          "name": "appearances",
+          "type": 6
+        },
+        {
+          "id": "4:6759004003264203854",
+          "name": "firstSeenMs",
+          "type": 6
+        },
+        {
+          "id": "5:422050776180330895",
+          "name": "lastSeenMs",
+          "indexId": "5:3402995484755718951",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "5:7255236162703906075",
+      "lastPropertyId": "2:3626755997728237034",
+      "name": "StrangerSequence",
+      "properties": [
+        {
+          "id": "1:6097198634575775772",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:3626755997728237034",
+          "name": "lastNumber",
+          "type": 5
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "2:5724033975412775664",
-  "lastIndexId": "2:1210613089703466990",
+  "lastEntityId": "5:7255236162703906075",
+  "lastIndexId": "5:3402995484755718951",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

@@ -9,6 +9,7 @@ import com.ml.shubham0204.facenet_android.domain.AppException
 import com.ml.shubham0204.facenet_android.domain.embeddings.FaceNet
 import com.ml.shubham0204.facenet_android.domain.face_detection.BaseFaceDetector
 import com.ml.shubham0204.facenet_android.domain.face_detection.FaceSpoofDetector
+import com.ml.shubham0204.facenet_android.engine.strangers.StrangerClusterer
 import org.koin.core.annotation.Single
 import kotlin.time.DurationUnit
 import kotlin.time.measureTimedValue
@@ -24,11 +25,13 @@ class FaceRecognitionEngine(
     private val imagesVectorDB: ImagesVectorDB,
     private val personDB: PersonDB,
     private val faceSpoofDetector: FaceSpoofDetector,
+    val strangers: StrangerClusterer,
 ) {
     suspend fun recognize(
         bitmap: Bitmap,
         threshold: Float,
         options: RecognizeOptions = RecognizeOptions(),
+        strangerThreshold: Float = threshold,
     ): RecognitionResult {
         val withLiveness = options.withLiveness
         val (allDetections, detectionTime) =
@@ -44,6 +47,7 @@ class FaceRecognitionEngine(
         var searchMs = 0L
         var spoofMs = 0L
         var sharpnessMs = 0L
+        var strangerMs = 0L
         val faces = ArrayList<RecognizedFace>(detections.size)
 
         for ((croppedFace, rect) in detections) {
@@ -71,6 +75,26 @@ class FaceRecognitionEngine(
                     null
                 }
 
+            val (stranger, tStranger) =
+                measureTimedValue {
+                    when {
+                        !options.clusterStrangers -> null
+                        recognized -> StrangerInfo(isStranger = false)
+                        else -> {
+                            val match = strangers.assign(embedding, minOf(rect.width(), rect.height()), strangerThreshold)
+                            StrangerInfo(
+                                isStranger = true,
+                                strangerId = match.cluster?.id,
+                                label = match.cluster?.label,
+                                status = match.status.wireName,
+                                appearances = match.cluster?.appearances,
+                                similarity = match.similarity,
+                            )
+                        }
+                    }
+                }
+            strangerMs += tStranger.toLong(DurationUnit.MILLISECONDS)
+
             faces +=
                 RecognizedFace(
                     box = FaceBox(rect.left, rect.top, rect.right, rect.bottom),
@@ -80,17 +104,18 @@ class FaceRecognitionEngine(
                     isRecognized = recognized,
                     spoof = spoof,
                     sharpness = sharpness,
+                    stranger = stranger,
                 )
         }
 
         val detectionMs = detectionTime.toLong(DurationUnit.MILLISECONDS)
         return RecognitionResult(
             faces = faces,
-            inferenceTimeMs = detectionMs + embeddingMs + searchMs + spoofMs + sharpnessMs,
+            inferenceTimeMs = detectionMs + embeddingMs + searchMs + spoofMs + sharpnessMs + strangerMs,
             imageWidth = bitmap.width,
             imageHeight = bitmap.height,
             threshold = threshold,
-            timings = RecognitionTimings(detectionMs, embeddingMs, searchMs, spoofMs, sharpnessMs),
+            timings = RecognitionTimings(detectionMs, embeddingMs, searchMs, spoofMs, sharpnessMs, strangerMs),
             personBox = options.personBox,
             facesOutsidePersonBox = allDetections.size - detections.size,
         )

@@ -6,6 +6,8 @@ import com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableExcep
 import com.ml.shubham0204.facenet_android.engine.NormalizedBox
 import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
 import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteResult
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteTarget
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -215,6 +217,67 @@ fun Application.faceApiModule(
                 call.respond(HttpStatusCode.Accepted, backend.selectBackend(requested))
             }
 
+            get("/api/settings/strangers") { call.respond(backend.getStrangerSettings()) }
+
+            put("/api/settings/strangers") {
+                val value = call.receiveSmallJson(StrangerSettingsRequest.serializer())?.threshold
+                if (value == null || value.isNaN() || value < 0f || value > 1f) {
+                    call.respond(HttpStatusCode.BadRequest, ApiError("invalid_threshold", "Send JSON {\"threshold\": <0..1>}"))
+                    return@put
+                }
+                call.respond(backend.setStrangerThreshold(value))
+            }
+
+            get("/api/strangers") {
+                val strangers = backend.listStrangers().map { it.toDto() }
+                call.respond(StrangersResponse(strangers, strangers.size, backend.getStrangerSettings().maxClusters))
+            }
+
+            delete("/api/strangers") { call.respond(DeleteAllResponse(backend.deleteAllStrangers())) }
+
+            delete("/api/strangers/{id}") {
+                val id = call.personIdOrRespond() ?: return@delete
+                if (backend.deleteStranger(id)) {
+                    call.respond(DeleteResponse(id))
+                } else {
+                    call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No stranger with id $id"))
+                }
+            }
+
+            post("/api/strangers/{id}/promote") {
+                val id = call.personIdOrRespond() ?: return@post
+                val request = call.receiveSmallJson(PromoteRequest.serializer())
+                val name = request?.name?.trim()
+                val target =
+                    when {
+                        request?.personId != null && request.personId > 0 -> PromoteTarget.ById(request.personId)
+                        request?.personId == null && !name.isNullOrEmpty() && name.length <= limits.maxNameLength -> PromoteTarget.ByName(name)
+                        else -> null
+                    }
+                if (target == null) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiError("invalid_promote", "Send JSON {\"name\": \"1..${limits.maxNameLength} chars\"} or {\"person_id\": <id>}"),
+                    )
+                    return@post
+                }
+                when (val result = backend.promoteStranger(id, target)) {
+                    PromoteResult.StrangerNotFound ->
+                        call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No stranger with id $id"))
+                    PromoteResult.PersonNotFound ->
+                        call.respond(HttpStatusCode.NotFound, ApiError("person_not_found", "No person with that person_id"))
+                    is PromoteResult.AmbiguousName ->
+                        call.respond(
+                            HttpStatusCode.Conflict,
+                            ApiError("ambiguous_name", "Several persons have this name (ids ${result.personIds.joinToString()}); send person_id"),
+                        )
+                    is PromoteResult.Promoted ->
+                        call.respond(
+                            PromoteResponse(result.strangerId, result.strangerLabel, result.personId, result.name, result.created, result.embeddingsMoved),
+                        )
+                }
+            }
+
             get("/api/persons") {
                 val persons = backend.listPersons().map { it.toDto() }
                 call.respond(PersonsResponse(persons, persons.size))
@@ -263,7 +326,20 @@ private suspend fun ApplicationCall.recognizeOptionsOrRespond(payload: Multipart
                 return null
             }
         }
-    return RecognizeOptions(withLiveness = liveness, personBox = personBox)
+    val clusterStrangers = strictBooleanOrRespond(payload, "cluster_strangers") ?: return null
+    return RecognizeOptions(withLiveness = liveness, personBox = personBox, clusterStrangers = clusterStrangers)
+}
+
+/** Absent → false; "true"/"false" → value; anything else → 400 and null. */
+private suspend fun ApplicationCall.strictBooleanOrRespond(
+    payload: MultipartPayload,
+    name: String,
+): Boolean? {
+    val raw = recognizeParam(payload, name) ?: return false
+    return raw.toBooleanStrictOrNull() ?: run {
+        respond(HttpStatusCode.BadRequest, ApiError("invalid_parameter", "$name must be true or false"))
+        null
+    }
 }
 
 /** Parses {id}; responds 400 and returns null when it is not a positive integer. */

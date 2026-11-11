@@ -33,6 +33,21 @@ class FaceApiServerTest {
 
         override fun selectBackend(backend: com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend): BackendSettingsResponse =
             error("unused")
+
+        override suspend fun listStrangers() = emptyList<com.ml.shubham0204.facenet_android.engine.strangers.StrangerCluster>()
+
+        override suspend fun promoteStranger(
+            strangerId: Long,
+            target: com.ml.shubham0204.facenet_android.engine.strangers.PromoteTarget,
+        ) = com.ml.shubham0204.facenet_android.engine.strangers.PromoteResult.StrangerNotFound
+
+        override suspend fun deleteStranger(strangerId: Long) = false
+
+        override suspend fun deleteAllStrangers() = 0
+
+        override fun getStrangerSettings(): StrangerSettingsResponse = error("unused")
+
+        override fun setStrangerThreshold(value: Float): StrangerSettingsResponse = error("unused")
     }
 
     @Test

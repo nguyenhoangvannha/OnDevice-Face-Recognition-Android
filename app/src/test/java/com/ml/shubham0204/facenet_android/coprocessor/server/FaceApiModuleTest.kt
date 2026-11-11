@@ -15,6 +15,13 @@ import com.ml.shubham0204.facenet_android.engine.backend.BackendStatus
 import com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableException
 import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
 import com.ml.shubham0204.facenet_android.engine.backend.ModelCatalog
+import com.ml.shubham0204.facenet_android.engine.StrangerInfo
+import com.ml.shubham0204.facenet_android.engine.strangers.FakeHousehold
+import com.ml.shubham0204.facenet_android.engine.strangers.InMemoryStrangerStore
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteResult
+import com.ml.shubham0204.facenet_android.engine.strangers.PromoteTarget
+import com.ml.shubham0204.facenet_android.engine.strangers.StrangerCluster
+import com.ml.shubham0204.facenet_android.engine.strangers.StrangerClusterer
 import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
@@ -58,11 +65,19 @@ private class FakeBackend : CoprocessorBackend {
         if (image.decodeToString() == "not-an-image") throw InvalidImageException()
         lastLiveness = options.withLiveness
         lastOptions = options
+        val unknown = RecognizedFace(FaceBox(50, 60, 90, 99), null, null, 0.21f, false)
         val faces =
-            listOf(
-                RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true, sharpness = 168.44f),
-                RecognizedFace(FaceBox(50, 60, 90, 99), null, null, 0.21f, false),
-            )
+            if (!options.clusterStrangers) {
+                listOf(RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true, sharpness = 168.44f), unknown)
+            } else {
+                val m = strangers.assign(floatArrayOf(1f, 0f, 0f), 60, strangerThreshold)
+                listOf(
+                    RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true, stranger = StrangerInfo(isStranger = false)),
+                    unknown.copy(
+                        stranger = StrangerInfo(true, m.cluster?.id, m.cluster?.label, m.status.wireName, m.cluster?.appearances, m.similarity),
+                    ),
+                )
+            }
         val dropped = if (options.personBox != null) 1 else 0
         return RecognizeOutcome(
             RecognitionResult(faces, 42, 640, 480, 0.7f, RecognitionTimings(10, 25, 7, 0), options.personBox, dropped),
@@ -113,6 +128,28 @@ private class FakeBackend : CoprocessorBackend {
         if (!ModelCatalog.spec(backend).available) throw BackendUnavailableException(backend, "not shipped")
         backendStatus = backendStatus.copy(requested = backend, phase = BackendPhase.DOWNLOADING, totalBytes = 100)
         return getBackendSettings()
+    }
+
+    val household = FakeHousehold()
+    val strangers = StrangerClusterer(InMemoryStrangerStore(), household)
+    var strangerThreshold = 0.7f
+
+    override suspend fun listStrangers(): List<StrangerCluster> = strangers.list()
+
+    override suspend fun promoteStranger(
+        strangerId: Long,
+        target: PromoteTarget,
+    ): PromoteResult = strangers.promote(strangerId, target)
+
+    override suspend fun deleteStranger(strangerId: Long): Boolean = strangers.delete(strangerId)
+
+    override suspend fun deleteAllStrangers(): Int = strangers.deleteAll()
+
+    override fun getStrangerSettings(): StrangerSettingsResponse = StrangerSettingsResponse(strangerThreshold, 200, 10, 40)
+
+    override fun setStrangerThreshold(value: Float): StrangerSettingsResponse {
+        strangerThreshold = value
+        return getStrangerSettings()
     }
 
     override suspend fun status(): StatusResponse = StatusResponse(80, 31.5f, true, "none", 40, 256, true, 1, 2, 0.7f, 5, 9, 33)
@@ -273,6 +310,113 @@ class FaceApiModuleTest {
                     }
                 assertEquals(bad, HttpStatusCode.BadRequest, res.status)
                 assertEquals("invalid_person_box", res.json()["error"]!!.jsonPrimitive.content)
+            }
+        }
+
+    @Test
+    fun recognizeWithoutClusteringKeepsV1Fields() =
+        api {
+            val face =
+                client.post("/api/recognize") {
+                    header(HttpHeaders.Authorization, "Bearer $TOKEN")
+                    setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                }.json()["faces"]!!.jsonArray[1].jsonObject
+            assertEquals("null", face["name"].toString())
+            assertEquals("null", face["is_stranger"].toString())
+            assertEquals(false, face["recognized"]!!.jsonPrimitive.content.toBoolean())
+        }
+
+    @Test
+    fun strangerClusteringFlow() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            suspend fun recognize() =
+                client.post("/api/recognize?cluster_strangers=true") {
+                    auth()
+                    setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                }.json()["faces"]!!.jsonArray
+
+            val first = recognize()
+            assertEquals(false, first[0].jsonObject["is_stranger"]!!.jsonPrimitive.content.toBoolean())
+            assertEquals("An", first[0].jsonObject["name"]!!.jsonPrimitive.content)
+            val s1 = first[1].jsonObject
+            assertEquals(true, s1["is_stranger"]!!.jsonPrimitive.content.toBoolean())
+            assertEquals("Person_01", s1["name"]!!.jsonPrimitive.content)
+            assertEquals("new", s1["stranger_status"]!!.jsonPrimitive.content)
+            assertEquals(1L, s1["appearances"]!!.jsonPrimitive.long)
+            assertEquals(false, s1["recognized"]!!.jsonPrimitive.content.toBoolean())
+            assertEquals("null", s1["person_id"].toString())
+
+            val s2 = recognize()[1].jsonObject
+            assertEquals("seen", s2["stranger_status"]!!.jsonPrimitive.content)
+            assertEquals(2L, s2["appearances"]!!.jsonPrimitive.long)
+            val strangerId = s2["stranger_id"]!!.jsonPrimitive.long
+
+            val list = client.get("/api/strangers") { auth() }.json()
+            assertEquals(1, list["count"]!!.jsonPrimitive.int)
+            assertEquals("Person_01", list["strangers"]!!.jsonArray[0].jsonObject["name"]!!.jsonPrimitive.content)
+
+            val bad = client.post("/api/strangers/$strangerId/promote") { auth(); contentType(ContentType.Application.Json); setBody("{}") }
+            assertEquals(HttpStatusCode.BadRequest, bad.status)
+            assertEquals("invalid_promote", bad.json()["error"]!!.jsonPrimitive.content)
+            val missing = client.post("/api/strangers/999/promote") { auth(); contentType(ContentType.Application.Json); setBody("{\"name\":\"Nam\"}") }
+            assertEquals(HttpStatusCode.NotFound, missing.status)
+
+            val promoted = client.post("/api/strangers/$strangerId/promote") { auth(); contentType(ContentType.Application.Json); setBody("{\"name\":\" Nam \"}") }
+            assertEquals(HttpStatusCode.OK, promoted.status)
+            val p = promoted.json()
+            assertEquals("Nam", p["name"]!!.jsonPrimitive.content)
+            assertEquals("Person_01", p["stranger_name"]!!.jsonPrimitive.content)
+            assertEquals(true, p["created"]!!.jsonPrimitive.content.toBoolean())
+            assertEquals(2, p["embeddings_moved"]!!.jsonPrimitive.int)
+            assertEquals(0, client.get("/api/strangers") { auth() }.json()["count"]!!.jsonPrimitive.int)
+
+            // A new cluster, then ambiguity and delete paths
+            val id3 = recognize()[1].jsonObject["stranger_id"]!!.jsonPrimitive.long
+            backend.household.create("Bo")
+            backend.household.create("Bo")
+            val ambiguous = client.post("/api/strangers/$id3/promote") { auth(); contentType(ContentType.Application.Json); setBody("{\"name\":\"Bo\"}") }
+            assertEquals(HttpStatusCode.Conflict, ambiguous.status)
+            assertEquals("ambiguous_name", ambiguous.json()["error"]!!.jsonPrimitive.content)
+            val noPerson = client.post("/api/strangers/$id3/promote") { auth(); contentType(ContentType.Application.Json); setBody("{\"person_id\":555}") }
+            assertEquals("person_not_found", noPerson.json()["error"]!!.jsonPrimitive.content)
+            assertEquals(HttpStatusCode.OK, client.delete("/api/strangers/$id3") { auth() }.status)
+            assertEquals(HttpStatusCode.NotFound, client.delete("/api/strangers/$id3") { auth() }.status)
+            recognize()
+            assertEquals(1, client.delete("/api/strangers") { auth() }.json()["deleted"]!!.jsonPrimitive.int)
+        }
+
+    @Test
+    fun strangerEndpointsNeedTokenAndValidateInput() =
+        api {
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/api/strangers").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.delete("/api/strangers").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.delete("/api/strangers/1").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.post("/api/strangers/1/promote").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/api/settings/strangers").status)
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            assertEquals(HttpStatusCode.BadRequest, client.delete("/api/strangers/abc") { auth() }.status)
+            val badFlag =
+                client.post("/api/recognize?cluster_strangers=yes") {
+                    auth()
+                    setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                }
+            assertEquals(HttpStatusCode.BadRequest, badFlag.status)
+            assertEquals("invalid_parameter", badFlag.json()["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun strangerSettingsApi() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            val got = client.get("/api/settings/strangers") { auth() }.json()
+            assertEquals("0.7", got["threshold"]!!.jsonPrimitive.content)
+            assertEquals(200, got["max_clusters"]!!.jsonPrimitive.int)
+            val put = client.put("/api/settings/strangers") { auth(); contentType(ContentType.Application.Json); setBody("{\"threshold\":0.75}") }
+            assertEquals("0.75", put.json()["threshold"]!!.jsonPrimitive.content)
+            for (bad in listOf("{\"threshold\":1.5}", "{}", "nope")) {
+                val res = client.put("/api/settings/strangers") { auth(); contentType(ContentType.Application.Json); setBody(bad) }
+                assertEquals(bad, HttpStatusCode.BadRequest, res.status)
             }
         }
 
