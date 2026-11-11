@@ -19,9 +19,10 @@ import socket
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 DEFAULT_TIMEOUT = 3.0
 
@@ -64,9 +65,20 @@ class XperiaFaceClient:
     def status(self) -> dict:
         return self._request("GET", "/api/status")
 
-    def recognize(self, image: ImageInput, liveness: bool = False) -> dict:
+    def recognize(self, image: ImageInput, liveness: bool = False,
+                  person_box: Optional[Sequence[float]] = None,
+                  cluster_strangers: bool = False) -> dict:
+        """person_box: normalized [x, y, w, h] (e.g. Frigate event data.box); only faces inside it are kept.
+        cluster_strangers: unknown faces get a persistent Person_NN label (is_stranger=true)."""
+        query = []
+        if liveness:
+            query.append(("liveness", "true"))
+        if person_box is not None:
+            query.append(("person_box", format_person_box(person_box)))
+        if cluster_strangers:
+            query.append(("cluster_strangers", "true"))
         body, content_type = _multipart([], [("image", _load(image))])
-        path = "/api/recognize" + ("?liveness=true" if liveness else "")
+        path = "/api/recognize" + ("?" + urllib.parse.urlencode(query, safe=",") if query else "")
         return self._request("POST", path, body, content_type)
 
     def enroll(self, name: str, images: Iterable[ImageInput]) -> dict:
@@ -85,6 +97,31 @@ class XperiaFaceClient:
 
     def delete_person(self, person_id: int) -> dict:
         return self._request("DELETE", "/api/persons/%d" % int(person_id))
+
+    def strangers(self) -> List[dict]:
+        return self._request("GET", "/api/strangers")["strangers"]
+
+    def promote_stranger(self, stranger_id: int, name: Optional[str] = None,
+                         person_id: Optional[int] = None) -> dict:
+        """Moves a stranger cluster into a household person (new name, existing name, or person_id)."""
+        if (name is None) == (person_id is None):
+            raise ValueError("give exactly one of name or person_id")
+        payload = {"name": name} if name is not None else {"person_id": int(person_id)}
+        return self._request("POST", "/api/strangers/%d/promote" % int(stranger_id),
+                             json.dumps(payload).encode("utf-8"), "application/json")
+
+    def delete_stranger(self, stranger_id: int) -> dict:
+        return self._request("DELETE", "/api/strangers/%d" % int(stranger_id))
+
+    def delete_all_strangers(self) -> dict:
+        return self._request("DELETE", "/api/strangers")
+
+    def stranger_settings(self) -> dict:
+        return self._request("GET", "/api/settings/strangers")
+
+    def set_stranger_threshold(self, threshold: float) -> dict:
+        return self._request("PUT", "/api/settings/strangers",
+                             json.dumps({"threshold": float(threshold)}).encode("utf-8"), "application/json")
 
     # -- plumbing ----------------------------------------------------------
 
@@ -107,6 +144,14 @@ class XperiaFaceClient:
             raise CoprocessorError(e.code, payload.get("error", "http_%d" % e.code),
                                    payload.get("message", "")) from None
         return json.loads(raw.decode("utf-8")) if raw else {}
+
+
+def format_person_box(box: Sequence[float]) -> str:
+    """[x, y, w, h] in 0..1 -> "x,y,w,h" (validated again by the server)."""
+    values = [float(v) for v in box]
+    if len(values) != 4:
+        raise ValueError("person_box needs 4 numbers: x, y, w, h")
+    return ",".join(repr(round(v, 6)) for v in values)
 
 
 def _load(image: ImageInput) -> Tuple[str, bytes, str]:
@@ -133,7 +178,9 @@ def _multipart(fields, files) -> Tuple[bytes, str]:
 
 
 def recognize_snapshot(image: ImageInput, liveness: bool = False,
-                       client: Optional[XperiaFaceClient] = None) -> Optional[dict]:
+                       client: Optional[XperiaFaceClient] = None,
+                       person_box: Optional[Sequence[float]] = None,
+                       cluster_strangers: bool = False) -> Optional[dict]:
     """Event-pipeline helper: returns the result, or None on timeout, network or API error.
 
     The caller should treat None as "unknown person" and never block an alert on it.
@@ -141,7 +188,8 @@ def recognize_snapshot(image: ImageInput, liveness: bool = False,
     started = time.monotonic()
     try:
         client = client or XperiaFaceClient()
-        result = client.recognize(image, liveness=liveness)
+        result = client.recognize(image, liveness=liveness, person_box=person_box,
+                                  cluster_strangers=cluster_strangers)
     except (CoprocessorError, urllib.error.URLError, socket.timeout, OSError, ValueError) as e:
         print("[xperia-face] failed after %.0f ms: %s" % ((time.monotonic() - started) * 1000, e),
               file=sys.stderr)
@@ -161,6 +209,16 @@ def main(argv=None) -> int:
     p = sub.add_parser("recognize")
     p.add_argument("image")
     p.add_argument("--liveness", action="store_true")
+    p.add_argument("--person-box", help="x,y,w,h normalized, e.g. Frigate data.box")
+    p.add_argument("--cluster-strangers", action="store_true")
+    sub.add_parser("strangers")
+    p = sub.add_parser("promote")
+    p.add_argument("stranger_id", type=int)
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--name")
+    g.add_argument("--person-id", type=int)
+    p = sub.add_parser("delete-stranger")
+    p.add_argument("stranger_id", type=int)
     p = sub.add_parser("enroll")
     p.add_argument("name")
     p.add_argument("images", nargs="+")
@@ -180,7 +238,15 @@ def main(argv=None) -> int:
         elif args.cmd == "persons":
             out = client.persons()
         elif args.cmd == "recognize":
-            out = client.recognize(args.image, liveness=args.liveness)
+            box = [float(v) for v in args.person_box.split(",")] if args.person_box else None
+            out = client.recognize(args.image, liveness=args.liveness, person_box=box,
+                                   cluster_strangers=args.cluster_strangers)
+        elif args.cmd == "strangers":
+            out = client.strangers()
+        elif args.cmd == "promote":
+            out = client.promote_stranger(args.stranger_id, name=args.name, person_id=args.person_id)
+        elif args.cmd == "delete-stranger":
+            out = client.delete_stranger(args.stranger_id)
         elif args.cmd == "enroll":
             out = client.enroll(args.name, args.images)
         elif args.cmd == "add-images":

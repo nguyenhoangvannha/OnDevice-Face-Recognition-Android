@@ -181,11 +181,20 @@
     const sy = canvas.height / data.image_height;
     ctx.lineWidth = 3;
     ctx.font = "16px system-ui, sans-serif";
+    if (data.person_box) {
+      const [px, py, pw, ph] = data.person_box;
+      ctx.setLineDash([8, 6]);
+      ctx.strokeStyle = "#f5a623";
+      ctx.strokeRect(px * canvas.width, py * canvas.height, pw * canvas.width, ph * canvas.height);
+      ctx.setLineDash([]);
+    }
     data.faces.forEach((f) => {
       const b = f.bbox;
       const x = b.left * sx, y = b.top * sy, w = (b.right - b.left) * sx, h = (b.bottom - b.top) * sy;
-      const color = f.recognized ? "#1db954" : "#e5484d";
-      let label = (f.recognized ? f.name : "unknown") + " " + f.similarity.toFixed(2);
+      const color = f.recognized ? "#1db954" : f.is_stranger ? "#8e4ec6" : "#e5484d";
+      let label = (f.recognized ? f.name : f.is_stranger && f.name ? f.name : "unknown") + " " + f.similarity.toFixed(2);
+      if (f.is_stranger && f.stranger_status) label += " " + f.stranger_status + (f.appearances ? " x" + f.appearances : "");
+      if (f.sharpness != null) label += " sharp=" + Math.round(f.sharpness);
       if (f.spoof) label += f.spoof.is_spoof ? " SPOOF" : " live";
       ctx.strokeStyle = color;
       ctx.strokeRect(x, y, w, h);
@@ -202,7 +211,13 @@
     if (!file) throw new Error("Choose an image");
     const form = new FormData();
     form.append("image", file, file.name);
-    const path = "/api/recognize" + ($("liveness").checked ? "?liveness=true" : "");
+    const query = new URLSearchParams();
+    if ($("liveness").checked) query.set("liveness", "true");
+    if ($("cluster-strangers").checked) query.set("cluster_strangers", "true");
+    const box = $("person-box").value.trim();
+    if (box) query.set("person_box", box);
+    const qs = query.toString().replace(/%2C/g, ",");
+    const path = "/api/recognize" + (qs ? "?" + qs : "");
     say($("recognize-msg"), "Recognizing…");
     const started = performance.now();
     const { data } = await api("POST", path, form);
@@ -210,7 +225,8 @@
     draw(await loadImage(file), data);
     say($("recognize-msg"),
       "inference_ms=" + data.inference_ms + " · roundtrip=" + roundtrip + " ms · faces=" + data.face_count +
-      " · known=" + data.recognized_count + " · threshold=" + data.threshold, "ok");
+      " · known=" + data.recognized_count + " · threshold=" + data.threshold +
+      (data.faces_outside_person_box ? " · outside person_box=" + data.faces_outside_person_box : ""), "ok");
     $("recognize-json").textContent = JSON.stringify(data, null, 2);
   }));
 
