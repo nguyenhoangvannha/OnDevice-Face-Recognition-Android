@@ -327,6 +327,15 @@ private suspend fun ApplicationCall.recognizeOptionsOrRespond(payload: Multipart
             }
         }
     val clusterStrangers = strictBooleanOrRespond(payload, "cluster_strangers") ?: return null
+    val demographics = strictBooleanOrRespond(payload, "demographics") ?: return null
+    if (demographics) {
+        // Reserved flag: no gender/age model ships yet (licence + runtime open, see docs/coprocessor/roadmap-recognize-v2.md).
+        respond(
+            HttpStatusCode.NotImplemented,
+            ApiError("not_available", "demographics is not available on this build: no gender/age model is installed"),
+        )
+        return null
+    }
     return RecognizeOptions(withLiveness = liveness, personBox = personBox, clusterStrangers = clusterStrangers)
 }
 
