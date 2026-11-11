@@ -15,6 +15,7 @@ TOKEN = "test-token-not-a-secret"
 
 class FakeApi(BaseHTTPRequestHandler):
     last_body = b""
+    last_path = ""
     delay = 0.0
 
     def log_message(self, *args):
@@ -38,16 +39,23 @@ class FakeApi(BaseHTTPRequestHandler):
             return self._send(401, {"error": "unauthorized", "message": "nope"})
         if self.path == "/api/persons":
             return self._send(200, {"persons": [{"person_id": 1, "name": "An"}], "count": 1})
+        if self.path == "/api/strangers":
+            return self._send(200, {"strangers": [{"stranger_id": 3, "name": "Person_03", "appearances": 4}], "count": 1})
+        if self.path == "/api/settings/strangers":
+            return self._send(200, {"threshold": 0.7, "max_clusters": 200})
         self._send(404, {"error": "not_found", "message": ""})
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         FakeApi.last_body = self.rfile.read(length)
+        FakeApi.last_path = self.path
         time.sleep(FakeApi.delay)
         if not self._authorized():
             return self._send(401, {"error": "unauthorized", "message": "nope"})
         if self.path.startswith("/api/recognize"):
             return self._send(200, {"faces": [], "face_count": 0, "recognized_count": 0, "inference_ms": 5})
+        if self.path == "/api/strangers/3/promote":
+            return self._send(200, {"person_id": 16, "name": "Nam", "stranger_name": "Person_03", "created": True})
         if self.path == "/api/persons/1/images":
             return self._send(200, {"person_id": 1, "name": "An", "images_accepted": 1, "images_rejected": []})
         if self.path.startswith("/api/persons/"):
@@ -56,9 +64,21 @@ class FakeApi(BaseHTTPRequestHandler):
             return self._send(201, {"person_id": 2, "name": "Binh", "images_accepted": 2, "images_rejected": []})
         self._send(404, {"error": "not_found", "message": ""})
 
+    def do_PUT(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        FakeApi.last_body = self.rfile.read(length)
+        if not self._authorized():
+            return self._send(401, {"error": "unauthorized", "message": "nope"})
+        threshold = json.loads(FakeApi.last_body)["threshold"]
+        self._send(200, {"threshold": threshold, "max_clusters": 200})
+
     def do_DELETE(self):
         if not self._authorized():
             return self._send(401, {"error": "unauthorized", "message": "nope"})
+        if self.path == "/api/strangers":
+            return self._send(200, {"deleted": 2})
+        if self.path == "/api/strangers/3":
+            return self._send(200, {"deleted": 1})
         self._send(404, {"error": "not_found", "message": "No person with id 9"})
 
 
@@ -96,6 +116,29 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(5, result["inference_ms"])
         self.assertIn(b'name="image"; filename="snapshot.jpg"', FakeApi.last_body)
         self.assertIn(b"\xff\xd8fake-jpeg", FakeApi.last_body)
+
+    def test_recognize_v2_query_parameters(self):
+        self.client.recognize(b"img")
+        self.assertEqual("/api/recognize", FakeApi.last_path)
+        self.client.recognize(b"img", liveness=True, person_box=[0.1, 0.2, 0.3, 0.4], cluster_strangers=True)
+        self.assertEqual("/api/recognize?liveness=true&person_box=0.1,0.2,0.3,0.4&cluster_strangers=true",
+                         FakeApi.last_path)
+        with self.assertRaises(ValueError):
+            self.client.recognize(b"img", person_box=[0.1, 0.2, 0.3])
+
+    def test_stranger_admin(self):
+        self.assertEqual("Person_03", self.client.strangers()[0]["name"])
+        promoted = self.client.promote_stranger(3, name="Nam")
+        self.assertTrue(promoted["created"])
+        self.assertEqual({"name": "Nam"}, json.loads(FakeApi.last_body))
+        with self.assertRaises(ValueError):
+            self.client.promote_stranger(3)
+        with self.assertRaises(ValueError):
+            self.client.promote_stranger(3, name="Nam", person_id=1)
+        self.assertEqual(1, self.client.delete_stranger(3)["deleted"])
+        self.assertEqual(2, self.client.delete_all_strangers()["deleted"])
+        self.assertEqual(0.7, self.client.stranger_settings()["threshold"])
+        self.assertEqual(0.75, self.client.set_stranger_threshold(0.75)["threshold"])
 
     def test_enroll_sends_name_and_images(self):
         result = self.client.enroll("Binh", [b"a", b"b"])
