@@ -406,6 +406,24 @@ class FaceApiModuleTest {
         }
 
     @Test
+    fun demographicsIsReservedAndReturns501() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            suspend fun call(query: String) =
+                client.post("/api/recognize$query") {
+                    auth()
+                    setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                }
+            val on = call("?demographics=true")
+            assertEquals(HttpStatusCode.NotImplemented, on.status)
+            assertEquals("not_available", on.json()["error"]!!.jsonPrimitive.content)
+            assertEquals(HttpStatusCode.OK, call("?demographics=false").status)
+            assertEquals(HttpStatusCode.BadRequest, call("?demographics=1").status)
+            val face = call("").json()["faces"]!!.jsonArray[0].jsonObject
+            assertEquals(false, face.containsKey("gender"))
+        }
+
+    @Test
     fun strangerSettingsApi() =
         api {
             val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
