@@ -63,12 +63,16 @@ interface StrangerStore {
         embedding: FloatArray,
     ): StrangerCluster
 
-    /** +1 appearance, adds [embedding] and keeps only the newest [maxEmbeddings]. */
+    /**
+     * Updates last-seen; +1 appearance when [countAppearance]; adds [embedding] (when not null) and keeps only the
+     * newest [maxEmbeddings].
+     */
     fun recordAppearance(
         id: Long,
         nowMs: Long,
-        embedding: FloatArray,
+        embedding: FloatArray?,
         maxEmbeddings: Int,
+        countAppearance: Boolean = true,
     ): StrangerCluster
 
     fun embeddings(id: Long): List<FloatArray>
@@ -129,28 +133,77 @@ class StrangerClusterer(
     private val store: StrangerStore,
     private val household: HouseholdDirectory,
     val limits: StrangerLimits = StrangerLimits(),
+    val events: EventTracker = EventTracker(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    /** Starts (or resumes) an event; see [assign] for what a repeat changes. */
+    @Synchronized
+    fun beginEvent(eventId: String): EventSession = events.begin(eventId, clock())
+
+    /**
+     * Assigns an unknown face to a cluster.
+     *
+     * With an [event]: a cluster counts at most one appearance per event, and a later frame of the same event only adds
+     * its embedding when it is sharper than the sharpest one this event stored. On a repeated event a face that matches
+     * no cluster joins the event's most similar cluster instead of creating a new one (a Frigate event tracks one person).
+     */
     @Synchronized
     fun assign(
         embedding: FloatArray,
         faceMinSidePx: Int,
         threshold: Float,
+        sharpness: Float? = null,
+        event: EventSession? = null,
     ): StrangerMatch {
         if (faceMinSidePx < limits.minFacePx) return StrangerMatch(StrangerStatus.TOO_SMALL, null, null)
         val now = clock()
+        val eventClusters = event?.state?.clusters
+        eventClusters?.keys?.retainAll { store.get(it) != null }
         val nearest = store.nearest(embedding)
         if (nearest != null && !nearest.second.isNaN() && nearest.second >= threshold) {
-            val cluster = store.recordAppearance(nearest.first, now, embedding, limits.maxEmbeddingsPerCluster)
-            return StrangerMatch(StrangerStatus.SEEN, cluster, nearest.second)
+            val (id, similarity) = nearest
+            if (eventClusters != null && eventClusters.containsKey(id)) {
+                return StrangerMatch(StrangerStatus.SEEN, sameEvent(id, now, embedding, sharpness, eventClusters), similarity)
+            }
+            val cluster = store.recordAppearance(id, now, embedding, limits.maxEmbeddingsPerCluster)
+            eventClusters?.put(id, sharpness)
+            return StrangerMatch(StrangerStatus.SEEN, cluster, similarity)
+        }
+        if (event != null && event.repeat && !eventClusters.isNullOrEmpty()) {
+            val (id, similarity) =
+                eventClusters.keys
+                    .map { id -> id to (store.embeddings(id).maxOfOrNull { cosine(embedding, it) } ?: 0f) }
+                    .maxBy { it.second }
+            return StrangerMatch(StrangerStatus.SEEN, sameEvent(id, now, embedding, sharpness, eventClusters), similarity)
         }
         while (store.count() >= limits.maxClusters) {
             val oldest = store.oldestSeen() ?: break
             store.delete(oldest)
+            events.forgetCluster(oldest)
         }
         val cluster = store.create(store.nextNumber(), now, embedding)
+        eventClusters?.put(cluster.id, sharpness)
         return StrangerMatch(StrangerStatus.NEW, cluster, nearest?.second)
     }
+
+    /** Another frame of an event that already counted [id]: no new appearance; keep the embedding only if sharper. */
+    private fun sameEvent(
+        id: Long,
+        now: Long,
+        embedding: FloatArray,
+        sharpness: Float?,
+        eventClusters: MutableMap<Long, Float?>,
+    ): StrangerCluster {
+        val best = eventClusters[id]
+        val sharper = sharpness != null && (best == null || sharpness > best)
+        if (sharper) eventClusters[id] = sharpness
+        return store.recordAppearance(id, now, if (sharper) embedding else null, limits.maxEmbeddingsPerCluster, countAppearance = false)
+    }
+
+    private fun cosine(
+        a: FloatArray,
+        b: FloatArray,
+    ): Float = com.ml.shubham0204.facenet_android.engine.SimilarityMath.cosineSimilarity(a, b).takeUnless { it.isNaN() } ?: 0f
 
     @Synchronized
     fun list(): List<StrangerCluster> = store.all()
@@ -159,10 +212,10 @@ class StrangerClusterer(
     fun count(): Int = store.count()
 
     @Synchronized
-    fun delete(id: Long): Boolean = store.delete(id)
+    fun delete(id: Long): Boolean = store.delete(id).also { events.forgetCluster(id) }
 
     @Synchronized
-    fun deleteAll(): Int = store.deleteAll()
+    fun deleteAll(): Int = store.deleteAll().also { events.clear() }
 
     /** Moves the cluster's embeddings into a household person (existing or new) and deletes the cluster. */
     @Synchronized
@@ -189,6 +242,7 @@ class StrangerClusterer(
         val embeddings = store.embeddings(strangerId)
         household.addEmbeddings(personId, embeddings)
         store.delete(strangerId)
+        events.forgetCluster(strangerId)
         return PromoteResult.Promoted(strangerId, cluster.label, personId, name, created, embeddings.size)
     }
 }

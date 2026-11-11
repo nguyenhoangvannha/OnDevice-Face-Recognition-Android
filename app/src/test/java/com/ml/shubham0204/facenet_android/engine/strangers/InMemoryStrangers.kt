@@ -36,14 +36,18 @@ class InMemoryStrangerStore : StrangerStore {
     override fun recordAppearance(
         id: Long,
         nowMs: Long,
-        embedding: FloatArray,
+        embedding: FloatArray?,
         maxEmbeddings: Int,
+        countAppearance: Boolean,
     ): StrangerCluster {
         val row = rows.getValue(id)
-        row.vectors += nowMs to embedding
-        row.vectors.sortByDescending { it.first }
-        while (row.vectors.size > maxEmbeddings) row.vectors.removeAt(row.vectors.lastIndex)
-        row.cluster = row.cluster.copy(appearances = row.cluster.appearances + 1, lastSeenMs = nowMs, numEmbeddings = row.vectors.size)
+        if (embedding != null) {
+            row.vectors += nowMs to embedding
+            row.vectors.sortByDescending { it.first }
+            while (row.vectors.size > maxEmbeddings) row.vectors.removeAt(row.vectors.lastIndex)
+        }
+        val appearances = row.cluster.appearances + if (countAppearance) 1 else 0
+        row.cluster = row.cluster.copy(appearances = appearances, lastSeenMs = nowMs, numEmbeddings = row.vectors.size)
         return row.cluster
     }
 

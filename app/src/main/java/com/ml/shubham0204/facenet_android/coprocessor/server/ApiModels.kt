@@ -138,6 +138,10 @@ data class RecognizeResponse(
     /** Echo of `person_box` as [x, y, w, h]; null when none was sent. */
     @SerialName("person_box") val personBox: List<Float>? = null,
     @SerialName("faces_outside_person_box") val facesOutsidePersonBox: Int = 0,
+    /** Echo of `event_id`; null when none was sent. */
+    @SerialName("event_id") val eventId: String? = null,
+    /** True when this `event_id` was already seen: stranger appearances were not counted again. */
+    @SerialName("event_repeat") val eventRepeat: Boolean = false,
 )
 
 @Serializable
@@ -286,6 +290,8 @@ fun RecognizeOutcome.toResponse(): RecognizeResponse =
         imageHeight = result.imageHeight,
         personBox = result.personBox?.let { listOf(it.x, it.y, it.w, it.h) },
         facesOutsidePersonBox = result.facesOutsidePersonBox,
+        eventId = result.eventId,
+        eventRepeat = result.eventRepeat,
     )
 
 fun EnrollResult.toResponse(): EnrollResponse =
