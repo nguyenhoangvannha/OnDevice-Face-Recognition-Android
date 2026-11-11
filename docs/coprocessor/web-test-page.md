@@ -21,7 +21,7 @@ trên máy cùng mạng mà không cần curl.
 | --- | --- |
 | Status | `GET /api/status`: pin, nhiệt độ pin, thermal status, heap, số người, ngưỡng, uptime |
 | Threshold | `GET`/`PUT /api/settings/threshold`; lưu cùng chỗ với slider trong app (dashboard tự cập nhật sau ≤ 5 s) |
-| Recognize | `POST /api/recognize` (tuỳ chọn liveness, `cluster_strangers`, `person_box`), vẽ khung lên ảnh: xanh = người quen, tím = người lạ đã gom (`Person_NN new/seen xN`), đỏ = lạ, nhãn có `similarity` và `sharp=`; khung `person_box` nét đứt; hiện `inference_ms`, thời gian khứ hồi, JSON thô |
+| Recognize | `POST /api/recognize` (tuỳ chọn liveness, `cluster_strangers`, `person_box`, `event_id`; dòng kết quả ghi event mới hay lặp lại), vẽ khung lên ảnh: xanh = người quen, tím = người lạ đã gom (`Person_NN new/seen xN`), đỏ = lạ, nhãn có `similarity` và `sharp=`; khung `person_box` nét đứt; hiện `inference_ms`, thời gian khứ hồi, JSON thô |
 | Persons | `GET /api/persons`; nút Delete có hộp xác nhận → `DELETE /api/persons/{id}` |
 | Strangers | Xem dưới |
 | Enroll | `POST /api/enroll` (tên + 1–10 ảnh) |

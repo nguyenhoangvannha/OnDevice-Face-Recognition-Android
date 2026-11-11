@@ -94,7 +94,7 @@ sai → `400 invalid_parameter` (khác `liveness` cũ, vẫn giữ kiểu lỏng
 ## 3. Thứ tự làm và kiểm thử
 
 Trạng thái 2026-11-11: bước 1–6 **đã làm** trên `feature/recognize-v2` (81 test JVM + 10 test Python qua, debug/release build
-qua). **Chưa** thử trên điện thoại. Chưa có: `event_id` chống đếm trùng, giao diện quản trị người lạ trên trang web
+qua). **Chưa** thử trên điện thoại. `event_id` chống đếm trùng: làm ở `feature/event-id`. Giao diện quản trị người lạ trên trang web
 (**đã làm** sau đó ở `feature/web-strangers`), test ObjectBox thật cho `StrangerDB`.
 
 

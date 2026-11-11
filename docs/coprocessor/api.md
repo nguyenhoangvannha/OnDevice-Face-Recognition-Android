@@ -115,6 +115,7 @@ trường `sharpness`, `sharpness_ms`, `person_box: null`, `faces_outside_person
 | --- | --- | --- |
 | `person_box` | `x,y,w,h` chuẩn hoá 0..1 (đúng `data.box` của event Frigate) | Chỉ giữ mặt có tâm nằm trong khung **và** ≥ 50% diện tích mặt trong khung. Lọc trước khi tính embedding. Sai định dạng (≠ 4 số, x/y ngoài 0..1, w/h ≤ 0 hoặc > 1, x+w > 1, y+h > 1) → `400 invalid_person_box` |
 | `cluster_strangers` | `true`/`false` | Mặt không khớp người nhà được gom vào cụm `Person_NN` lưu trên máy (chỉ vector, không ảnh). Giá trị khác → `400 invalid_parameter` |
+| `event_id` | 1..64 ký tự `A-Z a-z 0-9 . _ : -` (vd. id event Frigate `1794372518.917899-f7uo07`) | Nhiều frame của cùng event không đếm `appearances` hai lần (xem dưới). Sai → `400 invalid_event_id` |
 | `demographics` | `true`/`false` | **Chưa có model**: `true` → `501 not_available`. `false` như không gửi. Giá trị khác → `400 invalid_parameter` |
 
 `liveness` giữ hành vi v1 (khác `true` thì coi là tắt).
@@ -141,7 +142,8 @@ curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
   "timings": {"decode_ms": 12, "detection_ms": 70, "embedding_ms": 170, "search_ms": 3, "spoof_ms": 0,
               "sharpness_ms": 1, "stranger_ms": 2},
   "image_width": 1920, "image_height": 1080,
-  "person_box": [0.41, 0.22, 0.12, 0.55], "faces_outside_person_box": 1
+  "person_box": [0.41, 0.22, 0.12, 0.55], "faces_outside_person_box": 1,
+  "event_id": null, "event_repeat": false
 }
 ```
 
@@ -158,9 +160,33 @@ curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
   `person_id` vẫn `null`** (để client cũ không coi người lạ là người quen).
 - Ghép cụm: cosine với vector gần nhất trong mọi cụm ≥ ngưỡng người lạ (mặc định **0.70**, đổi bằng
   `PUT /api/settings/strangers`). Mỗi cụm giữ 10 vector mới nhất; tối đa 200 cụm, đầy thì xoá cụm lâu không thấy nhất. Số `NN`
-  tăng mãi, không dùng lại. Mỗi request đếm 1 lần xuất hiện: client nên gửi 1 ảnh/event.
+  tăng mãi, không dùng lại. Không có `event_id` thì mỗi request đếm 1 lần xuất hiện; gửi nhiều frame/event thì kèm `event_id`.
 
-Lỗi mới: `400 invalid_person_box`, `400 invalid_parameter`, `501 not_available` (`demographics=true`).
+#### `event_id` (chống đếm trùng)
+
+```bash
+curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" -F "image=@frame2.jpg" \
+     "$XPERIA_FACE_URL/api/recognize?cluster_strangers=true&event_id=1794372518.917899-f7uo07"
+# {..., "faces": [{..., "name": "Person_03", "stranger_status": "seen", "appearances": 5}],
+#  "event_id": "1794372518.917899-f7uo07", "event_repeat": true}
+```
+
+- Response luôn có `event_id` (bản sao, `null` khi không gửi) và `event_repeat` (`true` khi id này đã gặp; `false` khi mới
+  hoặc không gửi).
+- Nhận diện người nhà chạy bình thường với mọi frame; `event_id` chỉ đổi cách gom người lạ:
+  - Một cụm chỉ được +1 `appearances` **một lần cho mỗi event**. Frame sau của cùng event vẫn trả `seen` + `appearances`
+    hiện tại, cập nhật `last_seen_ms`.
+  - Frame sau chỉ **thêm embedding** vào cụm khi mặt **nét hơn** (`sharpness` lớn hơn) mặt nét nhất mà event này đã lưu vào
+    cụm đó. Giới hạn 10 embedding mỗi cụm vẫn áp dụng (bỏ cái cũ nhất).
+  - Event lặp lại mà mặt không khớp cụm nào (dưới ngưỡng, vd. quay nghiêng) → gán vào cụm **gần nhất trong các cụm của
+    event đó** thay vì tạo `Person_NN` mới (một event Frigate theo dõi một người; dùng kèm `person_box` để chỉ còn mặt của
+    người đó). Frame đầu tiên của event vẫn có thể tạo nhiều cụm nếu ảnh có nhiều người lạ.
+  - Cụm bị xoá/promote/thay thế giữa chừng thì event quên cụm đó.
+- Bộ nhớ event: **chỉ trong RAM**, LRU tối đa 1.000 event, TTL 24 giờ tính từ lần thấy cuối. Khởi động lại app → quên hết,
+  frame đầu sau đó được tính như event mới (nhiều nhất thêm 1 `appearances`). Chọn RAM vì đơn giản, không ghi flash mỗi
+  request; đổi sang ObjectBox nếu thấy app hay bị khởi động lại.
+
+Lỗi mới: `400 invalid_person_box`, `400 invalid_parameter`, `400 invalid_event_id`, `501 not_available` (`demographics=true`).
 
 ## POST /api/enroll
 

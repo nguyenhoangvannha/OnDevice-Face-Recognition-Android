@@ -20,12 +20,16 @@ bash ./gradlew testDebugUnitTest
 | `engine/PersonBoxTest` (v2) | parse `x,y,w,h` (đúng/sai/NaN/ngoài 0..1/vượt mép), lọc mặt theo tâm + ≥ 50% diện tích |
 | `engine/SharpnessTest` (v2) | Laplacian variance khớp OpenCV 5.0.0 (`cv2.resize` + `BGR2GRAY` + `Laplacian CV_64F`) trên 5 ảnh mẫu, sai số ≤ 5% (ảnh gần phẳng ≤ 10%) |
 | `engine/strangers/StrangerClustererTest` (v2) | `new`/`seen`/`too_small`, đếm `appearances`, giữ 10 vector, xoá cụm cũ nhất khi đầy, số `NN` không dùng lại, promote theo tên mới/cũ/id, lỗi không có cụm/không có người/trùng tên |
+| `engine/strangers/EventTrackerTest` (event_id) | ký tự hợp lệ / sai / quá 64; lặp lại trong TTL, TTL tính từ lần cuối, hết hạn; LRU bỏ event ít dùng nhất |
+| `StrangerClustererTest` (event_id) | event lặp lại không +1 `appearances`, chỉ thêm embedding khi nét hơn, giới hạn embedding vẫn áp dụng, không tạo cụm trùng khi lặp lại, frame đầu vẫn tạo được nhiều cụm, quên cụm đã xoá, `too_small` |
+| `FaceApiModuleTest` (event_id) | `event_id`/`event_repeat` khi không gửi / mới / lặp lại; query và multipart; frame mờ không thêm embedding, frame nét thì thêm; event khác đếm lại; 5 giá trị sai → `400 invalid_event_id`; 64 ký tự → 200 |
 | `FaceApiModuleTest` (web người lạ) | trang có màn hình Strangers, `app.js` gọi `/api/strangers`, promote, cài đặt; không có sink HTML (`innerHTML`…), không URL ngoài |
 | `FaceApiModuleTest` (v2) | `person_box` query/multipart + 400; mặc định không đổi trường v1; luồng `cluster_strangers` qua 2 request (new → seen), list, promote 400/404/409/200, delete, delete all; 401 cho mọi endpoint người lạ; `cluster_strangers=yes` → 400; cài đặt người lạ GET/PUT/400; `demographics=true` → 501, `false` → 200, `1` → 400 |
 
 Test REST chạy với backend giả, nên **không** kiểm model thật, ML Kit hay ObjectBox. Gom cụm người lạ được test với
 store trong RAM cùng hợp đồng với `StrangerDB` (ObjectBox); bản ObjectBox thật chưa chạy test trên máy (cần thử trên điện thoại).
 
+2026-11-11, nhánh `feature/event-id`: **92/92** test JVM qua, debug + release build qua; client Python 10/10.
 2026-11-11, nhánh `feature/web-strangers`: **82/82** test JVM qua, debug + release build qua.
 2026-11-11, nhánh `feature/recognize-v2`: **81/81** test JVM qua, `assembleDebug` + `assembleRelease` qua (MacBook).
 
@@ -37,7 +41,7 @@ cd clients/python && python3 -m unittest -v test_xperia_face_client
 
 10 test với server HTTP giả: bắt buộc biến môi trường, `repr` không lộ token, multipart recognize/enroll/add-images, lỗi 401/404,
 `recognize_snapshot` trả `None` khi timeout hoặc không kết nối được; v2: query `liveness`/`person_box`/`cluster_strangers`,
-`person_box` sai số phần tử → `ValueError`, quản trị người lạ (list, promote theo tên, đúng một trong `name`/`person_id`,
+`person_box` sai số phần tử → `ValueError`, `event_id` đúng vào query và sai → `ValueError`, quản trị người lạ (list, promote theo tên, đúng một trong `name`/`person_id`,
 xoá, xoá hết, đọc/đặt ngưỡng).
 
 ## Trang web trong trình duyệt (chạy tay)
