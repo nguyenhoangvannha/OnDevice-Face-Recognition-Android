@@ -214,3 +214,12 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
   (có xác nhận), ngưỡng người lạ. Không đổi backend; mọi tên chèn bằng `textContent`.
 - Test: 82/82 JVM (thêm kiểm trang không dùng `innerHTML`), debug + release build qua; Chrome headless với API giả
   (`tools/web-ui-test/`) 17/17. Chưa mở trên điện thoại.
+
+## 2026-11-11 — `event_id` chống đếm trùng (nhánh `feature/event-id`)
+
+- Anh duyệt `event_id`. Nhánh dựa trên `feature/web-strangers` (cùng sửa `app.js` và tài liệu) nên PR chứa cả commit của PR #5.
+- `POST /api/recognize?event_id=...` (1..64 ký tự `A-Za-z0-9._:-`, sai → `400 invalid_event_id`); response có `event_id`,
+  `event_repeat`. Mỗi cụm người lạ chỉ +1 `appearances` một lần mỗi event; frame sau chỉ thêm embedding khi nét hơn; event lặp
+  lại không tạo cụm mới. Nhớ event trong RAM (LRU 1.000, TTL 24 giờ); khởi động lại thì quên.
+- Client Python `event_id=` / `--event-id`; trang web có ô `event_id`.
+- 92/92 test JVM, 10/10 Python, debug + release build qua, Chrome headless 17/17. Chưa thử trên điện thoại.
