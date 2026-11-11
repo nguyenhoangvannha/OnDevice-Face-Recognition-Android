@@ -11,6 +11,11 @@ object EventIds {
 /** What one event has done to stranger clusters so far. Mutated only under the [StrangerClusterer] lock. */
 class EventState internal constructor(
     var lastSeenMs: Long,
+    /**
+     * Owner key for this event's embedding slots. Fresh for every tracker entry, so after expiry, LRU eviction or an app
+     * restart the same event id gets new slots instead of overwriting embeddings from the earlier entry.
+     */
+    val slotKey: String,
 ) {
     /** Cluster id → sharpest face (Laplacian variance) stored from this event; null when the sharpness was unknown. */
     internal val clusters = LinkedHashMap<Long, Float?>()
@@ -41,7 +46,7 @@ class EventTracker(
     ): EventSession {
         purge(nowMs)
         val existing = events[eventId]
-        val state = existing ?: EventState(nowMs).also { events[eventId] = it }
+        val state = existing ?: EventState(nowMs, "$eventId#${java.util.UUID.randomUUID()}").also { events[eventId] = it }
         state.lastSeenMs = nowMs
         while (events.size > maxEvents) events.remove(events.keys.first())
         return EventSession(eventId, existing != null, state)

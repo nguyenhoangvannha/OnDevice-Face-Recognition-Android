@@ -1,6 +1,7 @@
 package com.ml.shubham0204.facenet_android.engine.strangers
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -129,9 +130,9 @@ class StrangerClustererTest {
     }
 
     @Test
-    fun repeatedEventCountsOnceAndKeepsOnlySharperFrames() {
+    fun repeatedEventCountsOnceAndReplacesItsSlotOnlyWhenSharper() {
         val e1 = clusterer.beginEvent("evt")
-        assertEquals(StrangerStatus.NEW, clusterer.assign(v(0), 80, 0.7f, 100f, e1).status)
+        val id = clusterer.assign(v(0), 80, 0.7f, 100f, e1).cluster!!.id
         val e2 = clusterer.beginEvent("evt")
         assertTrue(e2.repeat)
         now += 5
@@ -140,25 +141,74 @@ class StrangerClustererTest {
         assertEquals(1L, blurry.cluster!!.appearances)
         assertEquals(1, blurry.cluster!!.numEmbeddings)
         assertEquals(1_005L, blurry.cluster!!.lastSeenMs)
+        assertEquals(0f, store.embeddings(id).single()[1], 0f) // still the first frame
+
         val sharp = clusterer.assign(v(0, 0.1f), 80, 0.7f, 150f, clusterer.beginEvent("evt"))
         assertEquals(1L, sharp.cluster!!.appearances)
-        assertEquals(2, sharp.cluster!!.numEmbeddings)
-        // Not sharper than the best of this event (150) any more
-        assertEquals(2, clusterer.assign(v(0, 0.1f), 80, 0.7f, 120f, clusterer.beginEvent("evt")).cluster!!.numEmbeddings)
-        // A different event counts a new appearance
-        assertEquals(2L, clusterer.assign(v(0), 80, 0.7f, 10f, clusterer.beginEvent("evt-2")).cluster!!.appearances)
+        assertEquals(1, sharp.cluster!!.numEmbeddings) // replaced, not added
+        assertEquals(0.1f, store.embeddings(id).single()[1], 0f)
+
+        // Not sharper than the best of this event (150): slot unchanged
+        clusterer.assign(v(0, 0.2f), 80, 0.7f, 120f, clusterer.beginEvent("evt"))
+        assertEquals(0.1f, store.embeddings(id).single()[1], 0f)
+
+        // A different event counts a new appearance and gets its own slot
+        val other = clusterer.assign(v(0), 80, 0.7f, 10f, clusterer.beginEvent("evt-2")).cluster!!
+        assertEquals(2L, other.appearances)
+        assertEquals(2, other.numEmbeddings)
     }
 
     @Test
-    fun embeddingCapStillAppliesWithinAnEvent() {
-        clusterer.assign(v(0), 80, 0.7f, 1f, clusterer.beginEvent("evt"))
+    fun oneEventNeverPushesOutOtherEventsEmbeddings() {
+        val id = clusterer.assign(v(0), 80, 0.7f, 1f, clusterer.beginEvent("a")).cluster!!.id
+        now += 1
+        clusterer.assign(v(0, 0.01f), 80, 0.7f, 1f, clusterer.beginEvent("b"))
         for (i in 2..6) {
             now += 1
-            clusterer.assign(v(0, i * 0.01f), 80, 0.7f, i.toFloat(), clusterer.beginEvent("evt"))
+            clusterer.assign(v(0, i * 0.01f), 80, 0.7f, i.toFloat(), clusterer.beginEvent("b"))
         }
         val c = clusterer.list().single()
-        assertEquals(1L, c.appearances)
-        assertEquals(2, c.numEmbeddings) // maxEmbeddingsPerCluster = 2 in this test
+        assertEquals(2L, c.appearances)
+        assertEquals(2, c.numEmbeddings)
+        assertEquals(2, store.slotKeys(id).distinct().size) // one slot each for a and b
+        assertTrue(store.slotKeys(id).all { it!!.startsWith("a#") || it.startsWith("b#") })
+    }
+
+    @Test
+    fun withoutEventIdEveryRequestAddsAnEmbeddingAndTheCapEvictsOldest() {
+        val id = clusterer.assign(v(0), 80, 0.7f).cluster!!.id
+        for (i in 1..3) {
+            now += 1
+            clusterer.assign(v(0, i * 0.01f), 80, 0.7f, i.toFloat())
+        }
+        assertEquals(4L, store.get(id)!!.appearances)
+        assertEquals(listOf(0.03f, 0.02f), store.embeddings(id).map { it[1] })
+        assertEquals(listOf<String?>(null, null), store.slotKeys(id))
+    }
+
+    @Test
+    fun expiredEventIsTreatedAsNewWithANewSlot() {
+        val short =
+            StrangerClusterer(store, household, StrangerLimits(maxClusters = 3, maxEmbeddingsPerCluster = 5), EventTracker(ttlMs = 100)) { now }
+        val id = short.assign(v(0), 80, 0.7f, 1f, short.beginEvent("evt")).cluster!!.id
+        now += 100
+        val again = short.beginEvent("evt")
+        assertFalse(again.repeat)
+        val m = short.assign(v(0, 0.1f), 80, 0.7f, 0.5f, again) // blurrier, but a new entry: counted and stored
+        assertEquals(2L, m.cluster!!.appearances)
+        assertEquals(2, m.cluster!!.numEmbeddings)
+        assertEquals(2, store.slotKeys(id).distinct().size)
+    }
+
+    @Test
+    fun restartForgetsEventsSoTheSameIdGetsANewSlot() {
+        val id = clusterer.assign(v(0), 80, 0.7f, 1f, clusterer.beginEvent("evt")).cluster!!.id
+        val restarted = StrangerClusterer(store, household, StrangerLimits(maxClusters = 3, maxEmbeddingsPerCluster = 5)) { now }
+        val session = restarted.beginEvent("evt")
+        assertFalse(session.repeat)
+        restarted.assign(v(0, 0.1f), 80, 0.7f, 50f, session)
+        assertEquals(2L, store.get(id)!!.appearances)
+        assertEquals(2, store.get(id)!!.numEmbeddings)
     }
 
     @Test
@@ -169,7 +219,8 @@ class StrangerClustererTest {
         assertEquals(StrangerStatus.SEEN, turned.status)
         assertEquals("Person_01", turned.cluster!!.label)
         assertEquals(1, clusterer.count())
-        assertEquals(2, turned.cluster!!.numEmbeddings) // sharper, so kept
+        assertEquals(1, turned.cluster!!.numEmbeddings) // sharper, so it replaced the event's slot
+        assertEquals(1.2f, store.embeddings(turned.cluster!!.id).single()[1], 0f)
         // Without an event id the same face does create a new cluster
         assertEquals(StrangerStatus.NEW, clusterer.assign(v(3), 80, 0.7f).status)
     }

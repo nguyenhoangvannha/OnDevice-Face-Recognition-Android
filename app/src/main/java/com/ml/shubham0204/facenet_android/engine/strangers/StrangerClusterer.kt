@@ -57,15 +57,18 @@ interface StrangerStore {
     /** Increments and returns the persisted label counter. */
     fun nextNumber(): Int
 
+    /** New cluster with one embedding, owned by [slotKey] when not null. */
     fun create(
         number: Int,
         nowMs: Long,
         embedding: FloatArray,
+        slotKey: String? = null,
     ): StrangerCluster
 
     /**
-     * Updates last-seen; +1 appearance when [countAppearance]; adds [embedding] (when not null) and keeps only the
-     * newest [maxEmbeddings].
+     * Updates last-seen; +1 appearance when [countAppearance]. When [embedding] is not null: if [slotKey] is not null and
+     * the cluster already has an embedding owned by it, that embedding is replaced in place; otherwise it is added
+     * (owned by [slotKey]) and only the newest [maxEmbeddings] are kept.
      */
     fun recordAppearance(
         id: Long,
@@ -73,6 +76,7 @@ interface StrangerStore {
         embedding: FloatArray?,
         maxEmbeddings: Int,
         countAppearance: Boolean = true,
+        slotKey: String? = null,
     ): StrangerCluster
 
     fun embeddings(id: Long): List<FloatArray>
@@ -143,8 +147,8 @@ class StrangerClusterer(
     /**
      * Assigns an unknown face to a cluster.
      *
-     * With an [event]: a cluster counts at most one appearance per event, and a later frame of the same event only adds
-     * its embedding when it is sharper than the sharpest one this event stored. On a repeated event a face that matches
+     * With an [event]: a cluster counts at most one appearance per event and the event owns at most one embedding slot in
+     * it; a later frame of the same event replaces that slot's embedding only when it is sharper than the one stored. On a repeated event a face that matches
      * no cluster joins the event's most similar cluster instead of creating a new one (a Frigate event tracks one person).
      */
     @Synchronized
@@ -163,9 +167,9 @@ class StrangerClusterer(
         if (nearest != null && !nearest.second.isNaN() && nearest.second >= threshold) {
             val (id, similarity) = nearest
             if (eventClusters != null && eventClusters.containsKey(id)) {
-                return StrangerMatch(StrangerStatus.SEEN, sameEvent(id, now, embedding, sharpness, eventClusters), similarity)
+                return StrangerMatch(StrangerStatus.SEEN, sameEvent(id, now, embedding, sharpness, eventClusters, event!!.state.slotKey), similarity)
             }
-            val cluster = store.recordAppearance(id, now, embedding, limits.maxEmbeddingsPerCluster)
+            val cluster = store.recordAppearance(id, now, embedding, limits.maxEmbeddingsPerCluster, slotKey = event?.state?.slotKey)
             eventClusters?.put(id, sharpness)
             return StrangerMatch(StrangerStatus.SEEN, cluster, similarity)
         }
@@ -174,30 +178,38 @@ class StrangerClusterer(
                 eventClusters.keys
                     .map { id -> id to (store.embeddings(id).maxOfOrNull { cosine(embedding, it) } ?: 0f) }
                     .maxBy { it.second }
-            return StrangerMatch(StrangerStatus.SEEN, sameEvent(id, now, embedding, sharpness, eventClusters), similarity)
+            return StrangerMatch(StrangerStatus.SEEN, sameEvent(id, now, embedding, sharpness, eventClusters, event!!.state.slotKey), similarity)
         }
         while (store.count() >= limits.maxClusters) {
             val oldest = store.oldestSeen() ?: break
             store.delete(oldest)
             events.forgetCluster(oldest)
         }
-        val cluster = store.create(store.nextNumber(), now, embedding)
+        val cluster = store.create(store.nextNumber(), now, embedding, event?.state?.slotKey)
         eventClusters?.put(cluster.id, sharpness)
         return StrangerMatch(StrangerStatus.NEW, cluster, nearest?.second)
     }
 
-    /** Another frame of an event that already counted [id]: no new appearance; keep the embedding only if sharper. */
+    /** Another frame of an event that already counted [id]: no new appearance; replace the event's slot only if sharper. */
     private fun sameEvent(
         id: Long,
         now: Long,
         embedding: FloatArray,
         sharpness: Float?,
         eventClusters: MutableMap<Long, Float?>,
+        slotKey: String,
     ): StrangerCluster {
         val best = eventClusters[id]
         val sharper = sharpness != null && (best == null || sharpness > best)
         if (sharper) eventClusters[id] = sharpness
-        return store.recordAppearance(id, now, if (sharper) embedding else null, limits.maxEmbeddingsPerCluster, countAppearance = false)
+        return store.recordAppearance(
+            id,
+            now,
+            if (sharper) embedding else null,
+            limits.maxEmbeddingsPerCluster,
+            countAppearance = false,
+            slotKey = slotKey,
+        )
     }
 
     private fun cosine(

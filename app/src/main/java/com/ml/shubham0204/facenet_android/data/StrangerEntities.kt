@@ -21,6 +21,8 @@ data class StrangerEmbeddingRecord(
     @Id var recordID: Long = 0,
     @Index var strangerID: Long = 0,
     var addedMs: Long = 0,
+    /** Event slot that owns this embedding (see EventState.slotKey); null for requests without event_id. */
+    var slotKey: String? = null,
     // Same model as FaceImageRecord. Matching uses an exact scan (bounded to a few thousand vectors);
     // the HNSW index is there for larger caps.
     @HnswIndex(

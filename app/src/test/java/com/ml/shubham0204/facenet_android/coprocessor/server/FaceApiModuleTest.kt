@@ -453,9 +453,9 @@ class FaceApiModuleTest {
             assertEquals(1L, face["appearances"]!!.jsonPrimitive.long)
             assertEquals(1, backend.strangers.list().single().numEmbeddings)
 
-            backend.nextSharpness = 300f // sharper frame: embedding added, still one appearance
+            backend.nextSharpness = 300f // sharper frame: replaces the event's embedding, still one appearance
             recognize("?cluster_strangers=true&event_id=$id")
-            assertEquals(2, backend.strangers.list().single().numEmbeddings)
+            assertEquals(1, backend.strangers.list().single().numEmbeddings)
             assertEquals(1L, backend.strangers.list().single().appearances)
 
             // Multipart field works too; a new event counts again
@@ -476,6 +476,7 @@ class FaceApiModuleTest {
                 }.json()
             assertEquals("evt-2", other["event_id"]!!.jsonPrimitive.content)
             assertEquals(2L, other["faces"]!!.jsonArray[1].jsonObject["appearances"]!!.jsonPrimitive.long)
+            assertEquals(2, backend.strangers.list().single().numEmbeddings) // the new event got its own slot
 
             for (bad in listOf("", "a%20b", "x".repeat(65), "%3Cscript%3E", "a/b")) {
                 val res = recognize("?event_id=$bad")

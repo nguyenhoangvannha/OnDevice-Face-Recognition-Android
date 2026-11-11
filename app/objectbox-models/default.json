@@ -67,7 +67,7 @@
     },
     {
       "id": "3:1453283011857853413",
-      "lastPropertyId": "4:3406333550058260436",
+      "lastPropertyId": "5:1216286830569485647",
       "name": "StrangerEmbeddingRecord",
       "properties": [
         {
@@ -94,6 +94,11 @@
           "indexId": "4:411340918049962971",
           "type": 28,
           "flags": 8
+        },
+        {
+          "id": "5:1216286830569485647",
+          "name": "slotKey",
+          "type": 9
         }
       ],
       "relations": []

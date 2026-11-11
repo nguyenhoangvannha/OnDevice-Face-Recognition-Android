@@ -35,11 +35,12 @@ class StrangerDB(
         number: Int,
         nowMs: Long,
         embedding: FloatArray,
+        slotKey: String?,
     ): StrangerCluster =
         store.callInTx {
             val record = StrangerRecord(number = number, appearances = 1, firstSeenMs = nowMs, lastSeenMs = nowMs)
             clusters.put(record)
-            vectors.put(StrangerEmbeddingRecord(strangerID = record.strangerID, addedMs = nowMs, embedding = embedding))
+            vectors.put(StrangerEmbeddingRecord(strangerID = record.strangerID, addedMs = nowMs, slotKey = slotKey, embedding = embedding))
             record.toCluster()
         }
 
@@ -49,6 +50,7 @@ class StrangerDB(
         embedding: FloatArray?,
         maxEmbeddings: Int,
         countAppearance: Boolean,
+        slotKey: String?,
     ): StrangerCluster =
         store.callInTx {
             val record = clusters.get(id) ?: error("Stranger $id not found")
@@ -56,9 +58,16 @@ class StrangerDB(
             record.lastSeenMs = nowMs
             clusters.put(record)
             if (embedding != null) {
-                vectors.put(StrangerEmbeddingRecord(strangerID = id, addedMs = nowMs, embedding = embedding))
-                val own = vectorsOf(id).sortedByDescending { it.addedMs }
-                if (own.size > maxEmbeddings) vectors.remove(own.drop(maxEmbeddings))
+                val slot = slotKey?.let { key -> vectorsOf(id).firstOrNull { it.slotKey == key } }
+                if (slot != null) {
+                    // Replace in place: keeps the slot's age, so one event never pushes out other events' embeddings.
+                    slot.embedding = embedding
+                    vectors.put(slot)
+                } else {
+                    vectors.put(StrangerEmbeddingRecord(strangerID = id, addedMs = nowMs, slotKey = slotKey, embedding = embedding))
+                    val own = vectorsOf(id).sortedByDescending { it.addedMs }
+                    if (own.size > maxEmbeddings) vectors.remove(own.drop(maxEmbeddings))
+                }
             }
             record.toCluster()
         }

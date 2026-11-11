@@ -4,14 +4,16 @@ import com.ml.shubham0204.facenet_android.engine.SimilarityMath
 
 /** Test double with the same contract as the ObjectBox StrangerDB. */
 class InMemoryStrangerStore : StrangerStore {
-    private data class Row(var cluster: StrangerCluster, val vectors: MutableList<Pair<Long, FloatArray>>)
+    private class Vec(var addedMs: Long, var embedding: FloatArray, val slotKey: String?)
+
+    private data class Row(var cluster: StrangerCluster, val vectors: MutableList<Vec>)
 
     private val rows = linkedMapOf<Long, Row>()
     private var nextId = 1L
     private var lastNumber = 0
 
     override fun nearest(embedding: FloatArray): Pair<Long, Float>? =
-        SimilarityMath.bestMatch(embedding, rows.values.flatMap { r -> r.vectors.map { r.cluster.id to it.second } }) { it.second }
+        SimilarityMath.bestMatch(embedding, rows.values.flatMap { r -> r.vectors.map { r.cluster.id to it.embedding } }) { it.second }
             ?.let { (pair, score) -> pair.first to score }
 
     override fun get(id: Long): StrangerCluster? = rows[id]?.cluster
@@ -26,10 +28,11 @@ class InMemoryStrangerStore : StrangerStore {
         number: Int,
         nowMs: Long,
         embedding: FloatArray,
+        slotKey: String?,
     ): StrangerCluster {
         val id = nextId++
         val cluster = StrangerCluster(id, number, 1, nowMs, nowMs, 1)
-        rows[id] = Row(cluster, mutableListOf(nowMs to embedding))
+        rows[id] = Row(cluster, mutableListOf(Vec(nowMs, embedding, slotKey)))
         return cluster
     }
 
@@ -39,19 +42,28 @@ class InMemoryStrangerStore : StrangerStore {
         embedding: FloatArray?,
         maxEmbeddings: Int,
         countAppearance: Boolean,
+        slotKey: String?,
     ): StrangerCluster {
         val row = rows.getValue(id)
         if (embedding != null) {
-            row.vectors += nowMs to embedding
-            row.vectors.sortByDescending { it.first }
-            while (row.vectors.size > maxEmbeddings) row.vectors.removeAt(row.vectors.lastIndex)
+            val slot = slotKey?.let { key -> row.vectors.firstOrNull { it.slotKey == key } }
+            if (slot != null) {
+                slot.embedding = embedding
+            } else {
+                row.vectors += Vec(nowMs, embedding, slotKey)
+                row.vectors.sortByDescending { it.addedMs }
+                while (row.vectors.size > maxEmbeddings) row.vectors.removeAt(row.vectors.lastIndex)
+            }
         }
         val appearances = row.cluster.appearances + if (countAppearance) 1 else 0
         row.cluster = row.cluster.copy(appearances = appearances, lastSeenMs = nowMs, numEmbeddings = row.vectors.size)
         return row.cluster
     }
 
-    override fun embeddings(id: Long): List<FloatArray> = rows[id]?.vectors?.map { it.second } ?: emptyList()
+    override fun embeddings(id: Long): List<FloatArray> = rows[id]?.vectors?.map { it.embedding } ?: emptyList()
+
+    /** Slot owners of a cluster's embeddings, newest first (test helper). */
+    fun slotKeys(id: Long): List<String?> = rows[id]?.vectors?.map { it.slotKey } ?: emptyList()
 
     override fun oldestSeen(): Long? = rows.values.minByOrNull { it.cluster.lastSeenMs }?.cluster?.id
 
