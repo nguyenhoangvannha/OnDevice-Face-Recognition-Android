@@ -60,7 +60,7 @@ private class FakeBackend : CoprocessorBackend {
         lastOptions = options
         val faces =
             listOf(
-                RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true),
+                RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true, sharpness = 168.44f),
                 RecognizedFace(FaceBox(50, 60, 90, 99), null, null, 0.21f, false),
             )
         val dropped = if (options.personBox != null) 1 else 0
@@ -186,6 +186,9 @@ class FaceApiModuleTest {
             val first = body["faces"]!!.jsonArray[0].jsonObject
             assertEquals("An", first["name"]!!.jsonPrimitive.content)
             assertEquals(1L, first["person_id"]!!.jsonPrimitive.long)
+            assertEquals("168.4", first["sharpness"]!!.jsonPrimitive.content)
+            assertEquals("null", body["faces"]!!.jsonArray[1].jsonObject["sharpness"].toString())
+            assertEquals(0L, body["timings"]!!.jsonObject["sharpness_ms"]!!.jsonPrimitive.long)
             assertEquals(true, backend.lastLiveness)
             val last = log.last()
             assertEquals("/api/recognize", last.path)

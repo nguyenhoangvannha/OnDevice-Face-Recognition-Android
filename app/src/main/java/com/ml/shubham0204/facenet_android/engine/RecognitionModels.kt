@@ -24,6 +24,8 @@ data class RecognizedFace(
     val similarity: Float,
     val isRecognized: Boolean,
     val spoof: SpoofInfo? = null,
+    /** Variance of the Laplacian of the face crop (see [Sharpness]); null when not computed. */
+    val sharpness: Float? = null,
 )
 
 data class RecognitionTimings(
@@ -31,6 +33,7 @@ data class RecognitionTimings(
     val embeddingMs: Long,
     val searchMs: Long,
     val spoofMs: Long,
+    val sharpnessMs: Long = 0,
 )
 
 data class RecognitionResult(
