@@ -46,24 +46,22 @@ class MLKitFaceDetector(
             } else if (faces.isEmpty()) {
                 return@withContext Result.failure<Bitmap>(AppException(ErrorCode.NO_FACE))
             } else {
-                // Validate the bounding box and
+                // Clamp the bounding box into the image and
                 // return the cropped face
-                val rect = faces[0].boundingBox
-                if (validateRect(imageBitmap, rect)) {
-                    val croppedBitmap =
-                        Bitmap.createBitmap(
-                            imageBitmap,
-                            rect.left,
-                            rect.top,
-                            rect.width(),
-                            rect.height(),
+                val rect =
+                    clampToImage(imageBitmap, faces[0].boundingBox)
+                        ?: return@withContext Result.failure<Bitmap>(
+                            AppException(ErrorCode.FACE_TOO_SMALL),
                         )
-                    return@withContext Result.success(croppedBitmap)
-                } else {
-                    return@withContext Result.failure<Bitmap>(
-                        AppException(ErrorCode.FACE_DETECTOR_FAILURE),
+                val croppedBitmap =
+                    Bitmap.createBitmap(
+                        imageBitmap,
+                        rect.left,
+                        rect.top,
+                        rect.width(),
+                        rect.height(),
                     )
-                }
+                return@withContext Result.success(croppedBitmap)
             }
         }
 
@@ -80,8 +78,7 @@ class MLKitFaceDetector(
                     frameBitmap,
                     0
                 )
-            )).filter { validateRect(frameBitmap, it.boundingBox) }
-                .map { detection -> detection.boundingBox }
+            )).mapNotNull { clampToImage(frameBitmap, it.boundingBox) }
                 .map { rect ->
                     val croppedBitmap =
                         Bitmap.createBitmap(
