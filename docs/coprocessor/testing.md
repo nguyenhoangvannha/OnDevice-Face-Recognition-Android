@@ -20,11 +20,13 @@ bash ./gradlew testDebugUnitTest
 | `engine/PersonBoxTest` (v2) | parse `x,y,w,h` (đúng/sai/NaN/ngoài 0..1/vượt mép), lọc mặt theo tâm + ≥ 50% diện tích |
 | `engine/SharpnessTest` (v2) | Laplacian variance khớp OpenCV 5.0.0 (`cv2.resize` + `BGR2GRAY` + `Laplacian CV_64F`) trên 5 ảnh mẫu, sai số ≤ 5% (ảnh gần phẳng ≤ 10%) |
 | `engine/strangers/StrangerClustererTest` (v2) | `new`/`seen`/`too_small`, đếm `appearances`, giữ 10 vector, xoá cụm cũ nhất khi đầy, số `NN` không dùng lại, promote theo tên mới/cũ/id, lỗi không có cụm/không có người/trùng tên |
+| `FaceApiModuleTest` (web người lạ) | trang có màn hình Strangers, `app.js` gọi `/api/strangers`, promote, cài đặt; không có sink HTML (`innerHTML`…), không URL ngoài |
 | `FaceApiModuleTest` (v2) | `person_box` query/multipart + 400; mặc định không đổi trường v1; luồng `cluster_strangers` qua 2 request (new → seen), list, promote 400/404/409/200, delete, delete all; 401 cho mọi endpoint người lạ; `cluster_strangers=yes` → 400; cài đặt người lạ GET/PUT/400; `demographics=true` → 501, `false` → 200, `1` → 400 |
 
 Test REST chạy với backend giả, nên **không** kiểm model thật, ML Kit hay ObjectBox. Gom cụm người lạ được test với
 store trong RAM cùng hợp đồng với `StrangerDB` (ObjectBox); bản ObjectBox thật chưa chạy test trên máy (cần thử trên điện thoại).
 
+2026-11-11, nhánh `feature/web-strangers`: **82/82** test JVM qua, debug + release build qua.
 2026-11-11, nhánh `feature/recognize-v2`: **81/81** test JVM qua, `assembleDebug` + `assembleRelease` qua (MacBook).
 
 ## Client Python
@@ -37,6 +39,12 @@ cd clients/python && python3 -m unittest -v test_xperia_face_client
 `recognize_snapshot` trả `None` khi timeout hoặc không kết nối được; v2: query `liveness`/`person_box`/`cluster_strangers`,
 `person_box` sai số phần tử → `ValueError`, quản trị người lạ (list, promote theo tên, đúng một trong `name`/`person_id`,
 xoá, xoá hết, đọc/đặt ngưỡng).
+
+## Trang web trong trình duyệt (chạy tay)
+
+[`tools/web-ui-test/`](../../tools/web-ui-test/README.md): Chrome headless + API giả (`mock_api.py`), không cần điện thoại hay
+token thật. `strangers.test.js` kiểm màn hình người lạ (17 kiểm tra, qua 2026-11-11 trên MacBook, Chrome + puppeteer-core 23).
+Không chạy trong CI.
 
 ## Kiểm thử trên máy thật (chưa làm)
 
