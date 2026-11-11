@@ -106,6 +106,62 @@ curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
 Lỗi: `400 missing_image`, `400 invalid_image` (không decode được hoặc rỗng), `413 payload_too_large`,
 `415 unsupported_media_type` (không phải multipart), `401`, `500 internal_error`.
 
+### Recognize v2 (nhánh `feature/recognize-v2`, chưa cài lên máy)
+
+Tham số tuỳ chọn mới, gửi qua query **hoặc** field text trong multipart (query thắng). Không gửi gì → giống hệt v1 (chỉ thêm
+trường `sharpness`, `sharpness_ms`, `person_box: null`, `faces_outside_person_box: 0`).
+
+| Tham số | Giá trị | Tác dụng |
+| --- | --- | --- |
+| `person_box` | `x,y,w,h` chuẩn hoá 0..1 (đúng `data.box` của event Frigate) | Chỉ giữ mặt có tâm nằm trong khung **và** ≥ 50% diện tích mặt trong khung. Lọc trước khi tính embedding. Sai định dạng (≠ 4 số, x/y ngoài 0..1, w/h ≤ 0 hoặc > 1, x+w > 1, y+h > 1) → `400 invalid_person_box` |
+| `cluster_strangers` | `true`/`false` | Mặt không khớp người nhà được gom vào cụm `Person_NN` lưu trên máy (chỉ vector, không ảnh). Giá trị khác → `400 invalid_parameter` |
+| `demographics` | `true`/`false` | **Chưa có model**: `true` → `501 not_available`. `false` như không gửi. Giá trị khác → `400 invalid_parameter` |
+
+`liveness` giữ hành vi v1 (khác `true` thì coi là tắt).
+
+```bash
+curl -s -H "Authorization: Bearer $XPERIA_FACE_TOKEN" \
+     -F "image=@snapshot.jpg;type=image/jpeg" \
+     "$XPERIA_FACE_URL/api/recognize?person_box=0.41,0.22,0.12,0.55&cluster_strangers=true"
+```
+
+```json
+{
+  "faces": [
+    {"bbox": {"left": 812, "top": 240, "right": 880, "bottom": 318},
+     "person_id": 9, "name": "Nha", "similarity": 0.81, "recognized": true, "spoof": null,
+     "sharpness": 168.4, "is_stranger": false, "stranger_id": null, "stranger_status": null,
+     "appearances": null, "stranger_similarity": null},
+    {"bbox": {"left": 1010, "top": 260, "right": 1062, "bottom": 322},
+     "person_id": null, "name": "Person_03", "similarity": 0.41, "recognized": false, "spoof": null,
+     "sharpness": 92.7, "is_stranger": true, "stranger_id": 3, "stranger_status": "seen",
+     "appearances": 5, "stranger_similarity": 0.78}
+  ],
+  "face_count": 2, "recognized_count": 1, "threshold": 0.7, "inference_ms": 260,
+  "timings": {"decode_ms": 12, "detection_ms": 70, "embedding_ms": 170, "search_ms": 3, "spoof_ms": 0,
+              "sharpness_ms": 1, "stranger_ms": 2},
+  "image_width": 1920, "image_height": 1080,
+  "person_box": [0.41, 0.22, 0.12, 0.55], "faces_outside_person_box": 1
+}
+```
+
+(Số liệu trong ví dụ là minh hoạ, chưa đo trên máy.)
+
+- `sharpness`: phương sai Laplacian trên mặt resize 112×112 xám, cùng công thức với `face_clustering.py` của Mac Mini
+  (`cv2.Laplacian(cv2.cvtColor(cv2.resize(roi,(112,112)),BGR2GRAY),CV_64F).var()`), so khớp OpenCV trong unit test (sai số ≤ 5%,
+  ảnh gần phẳng ≤ 10%). Lớn = nét. 1 chữ số thập phân. Không đặt ngưỡng phía app: client tự quyết (Mac Mini đang dùng ngưỡng riêng).
+- `person_box` trong response: khung đã parse (hoặc `null`); `faces_outside_person_box`: số mặt phát hiện bị loại vì nằm ngoài khung.
+  `face_count` chỉ đếm mặt được giữ.
+- Người lạ: `is_stranger` là `null` khi không bật `cluster_strangers`, `false` cho người nhà, `true` cho mặt không khớp.
+  `stranger_status`: `new` (vừa tạo cụm), `seen` (khớp cụm cũ, `appearances` +1), `too_small` (cạnh ngắn của mặt < `min_face_px`
+  = 40 px: không gom, `stranger_id`/`name` `null`). Với người lạ `name = "Person_NN"` nhưng **`recognized` vẫn `false` và
+  `person_id` vẫn `null`** (để client cũ không coi người lạ là người quen).
+- Ghép cụm: cosine với vector gần nhất trong mọi cụm ≥ ngưỡng người lạ (mặc định **0.70**, đổi bằng
+  `PUT /api/settings/strangers`). Mỗi cụm giữ 10 vector mới nhất; tối đa 200 cụm, đầy thì xoá cụm lâu không thấy nhất. Số `NN`
+  tăng mãi, không dùng lại. Mỗi request đếm 1 lần xuất hiện: client nên gửi 1 ảnh/event.
+
+Lỗi mới: `400 invalid_person_box`, `400 invalid_parameter`, `501 not_available` (`demographics=true`).
+
 ## POST /api/enroll
 
 `multipart/form-data`: field `name` (text) và 1..10 file ở field `image`. Mỗi ảnh phải có **đúng 1** khuôn mặt.
@@ -172,6 +228,37 @@ curl -s -X PUT -H "Authorization: Bearer $XPERIA_FACE_TOKEN" -H "Content-Type: a
 - Giá trị 0..1 (kể cả 0 và 1). Ngoài khoảng, thiếu trường, hay JSON hỏng → `400 invalid_threshold`. Body > 4 KiB → `413`.
 - Lưu vào `CoprocessorSettings` (SharedPreferences), có hiệu lực ngay cho request sau. Slider trong app cho phép
   0.30–0.95; giá trị đặt qua API ngoài khoảng đó vẫn được lưu, slider chỉ hiển thị kẹp trong khoảng.
+
+## Người lạ: /api/strangers (v2)
+
+```bash
+H="Authorization: Bearer $XPERIA_FACE_TOKEN"
+curl -s -H "$H" "$XPERIA_FACE_URL/api/strangers"
+# {"strangers": [{"stranger_id": 3, "name": "Person_03", "appearances": 5, "num_embeddings": 5,
+#                 "first_seen_ms": 1762840000000, "last_seen_ms": 1762843600000}], "count": 1, "max_clusters": 200}
+curl -s -X POST -H "$H" -H "Content-Type: application/json" -d '{"name": "Chu_Ba"}' \
+     "$XPERIA_FACE_URL/api/strangers/3/promote"
+# {"stranger_id": 3, "stranger_name": "Person_03", "person_id": 16, "name": "Chu_Ba", "created": true, "embeddings_moved": 5}
+curl -s -X POST -H "$H" -H "Content-Type: application/json" -d '{"person_id": 9}' \
+     "$XPERIA_FACE_URL/api/strangers/4/promote"
+curl -s -X DELETE -H "$H" "$XPERIA_FACE_URL/api/strangers/5"      # {"deleted": 5}
+curl -s -X DELETE -H "$H" "$XPERIA_FACE_URL/api/strangers"        # {"deleted": <số cụm đã xoá>}
+curl -s -H "$H" "$XPERIA_FACE_URL/api/settings/strangers"
+# {"threshold": 0.7, "max_clusters": 200, "max_embeddings_per_cluster": 10, "min_face_px": 40}
+curl -s -X PUT -H "$H" -H "Content-Type: application/json" -d '{"threshold": 0.72}' "$XPERIA_FACE_URL/api/settings/strangers"
+```
+
+- `GET /api/strangers`: mới thấy gần nhất trước.
+- `promote`: `{"name": ...}` → nhập vào người nhà có đúng tên đó (`created: false`) hoặc tạo người mới (`created: true`);
+  `{"person_id": n}` → nhập vào người đó (gửi cả hai thì `person_id` thắng). Toàn bộ vector của cụm chuyển sang người nhà,
+  `num_images` tăng tương ứng, cụm bị xoá. Lỗi: `400 invalid_promote` (thiếu/rỗng/tên quá dài/`person_id` ≤ 0),
+  `404 not_found` (không có cụm), `404 person_not_found`, `409 ambiguous_name` (nhiều người cùng tên → gửi `person_id`),
+  `400 invalid_id`.
+- `DELETE /api/strangers/{id}`: `200`, `404 not_found`, `400 invalid_id`. `DELETE /api/strangers` xoá hết (dữ liệu sinh trắc
+  người lạ).
+- `PUT /api/settings/strangers`: chỉ đổi `threshold` (0..1); sai → `400 invalid_threshold`. Các giới hạn khác cố định trong bản này.
+- `GET /api/status` có thêm `strangers` (số cụm).
+
 
 ## GET / PUT /api/settings/backend
 
