@@ -192,3 +192,16 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
 - Nhánh `fix/clamp-face-box`: `FaceBoxClamp` kẹp khung vào ảnh (bỏ khi cạnh < 20 px hoặc < 50% khung trong ảnh), lý do từ chối
   mới `Face is too small or mostly outside the image`, 9 test mới (48/48 qua), `assembleDebug`/`assembleRelease` qua. PR, chưa merge.
 - Ảnh thử cho anh: `~/Downloads/xperia-face-test/` trên MacBook (có README.txt).
+
+## 2026-11-11 — Recognize v2 (nhánh `feature/recognize-v2`)
+
+- Đọc bản đánh giá tích hợp homelab; lộ trình và phần còn thiếu: [roadmap-recognize-v2.md](roadmap-recognize-v2.md).
+- `person_box=x,y,w,h` (chuẩn hoá, như `data.box` Frigate): lọc mặt theo tâm + ≥ 50% diện tích trước embedding;
+  response có `person_box`, `faces_outside_person_box`.
+- `sharpness` mỗi mặt: Laplacian variance cùng công thức Mac Mini, khớp OpenCV trong test.
+- `cluster_strangers=true`: cụm `Person_NN` lưu ObjectBox (chỉ vector), ngưỡng 0.70, 200 cụm × 10 vector, mặt < 40 px bỏ qua;
+  `recognized`/`person_id` không đổi nghĩa. API `/api/strangers` (list, promote, delete, delete all), `/api/settings/strangers`.
+- `demographics=true` → `501 not_available`: model InsightFace chỉ cho nghiên cứu phi thương mại và app không có ONNX Runtime.
+  Ba lựa chọn trong lộ trình, chờ anh quyết.
+- Trang web: ô `person_box`, ô gom người lạ, nhãn có `Person_NN`/trạng thái/độ nét. Client Python: tham số mới + quản trị người lạ.
+- 81/81 test JVM, 10/10 test Python, debug + release build qua. Chưa thử trên điện thoại. PR vào `main`, chưa merge.

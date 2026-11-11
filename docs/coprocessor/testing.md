@@ -17,8 +17,15 @@ bash ./gradlew testDebugUnitTest
 | `coprocessor/server/FaceApiServerTest` | Ktor CIO thật trên cổng local: health 200, 401/200 theo token, stop; báo lỗi khi port bị chiếm |
 | `coprocessor/TokenUtilsTest` | token 43 ký tự URL-safe, ngẫu nhiên; so khớp, null, rỗng |
 | `coprocessor/CoprocessorStateHolderTest` | log giữ N request mới nhất, đếm tổng |
+| `engine/PersonBoxTest` (v2) | parse `x,y,w,h` (đúng/sai/NaN/ngoài 0..1/vượt mép), lọc mặt theo tâm + ≥ 50% diện tích |
+| `engine/SharpnessTest` (v2) | Laplacian variance khớp OpenCV 5.0.0 (`cv2.resize` + `BGR2GRAY` + `Laplacian CV_64F`) trên 5 ảnh mẫu, sai số ≤ 5% (ảnh gần phẳng ≤ 10%) |
+| `engine/strangers/StrangerClustererTest` (v2) | `new`/`seen`/`too_small`, đếm `appearances`, giữ 10 vector, xoá cụm cũ nhất khi đầy, số `NN` không dùng lại, promote theo tên mới/cũ/id, lỗi không có cụm/không có người/trùng tên |
+| `FaceApiModuleTest` (v2) | `person_box` query/multipart + 400; mặc định không đổi trường v1; luồng `cluster_strangers` qua 2 request (new → seen), list, promote 400/404/409/200, delete, delete all; 401 cho mọi endpoint người lạ; `cluster_strangers=yes` → 400; cài đặt người lạ GET/PUT/400; `demographics=true` → 501, `false` → 200, `1` → 400 |
 
-Test REST chạy với backend giả, nên **không** kiểm model thật, ML Kit hay ObjectBox.
+Test REST chạy với backend giả, nên **không** kiểm model thật, ML Kit hay ObjectBox. Gom cụm người lạ được test với
+store trong RAM cùng hợp đồng với `StrangerDB` (ObjectBox); bản ObjectBox thật chưa chạy test trên máy (cần thử trên điện thoại).
+
+2026-11-11, nhánh `feature/recognize-v2`: **81/81** test JVM qua, `assembleDebug` + `assembleRelease` qua (MacBook).
 
 ## Client Python
 
@@ -26,8 +33,10 @@ Test REST chạy với backend giả, nên **không** kiểm model thật, ML Ki
 cd clients/python && python3 -m unittest -v test_xperia_face_client
 ```
 
-8 test với server HTTP giả: bắt buộc biến môi trường, `repr` không lộ token, multipart recognize/enroll/add-images, lỗi 401/404,
-`recognize_snapshot` trả `None` khi timeout hoặc không kết nối được.
+10 test với server HTTP giả: bắt buộc biến môi trường, `repr` không lộ token, multipart recognize/enroll/add-images, lỗi 401/404,
+`recognize_snapshot` trả `None` khi timeout hoặc không kết nối được; v2: query `liveness`/`person_box`/`cluster_strangers`,
+`person_box` sai số phần tử → `ValueError`, quản trị người lạ (list, promote theo tên, đúng một trong `name`/`person_id`,
+xoá, xoá hết, đọc/đặt ngưỡng).
 
 ## Kiểm thử trên máy thật (chưa làm)
 
@@ -181,3 +190,13 @@ nhỏ (2304×1296, mặt ~40 px) để nhận diện tin cậy; nên gửi crop 
 `Face is too small or mostly outside the image`. 9 unit test mới (`FaceBoxClampTest`); tổng 48 test qua.
 Cần kiểm lại trên máy sau khi cài: các crop Frigate nguyên bản trong `~/Downloads/xperia-face-test/` phải được nhận
 mà không cần thêm viền.
+
+## Recognize v2 trên máy thật (chưa làm)
+
+Máy đang chạy bản trước v2. Sau khi cài bản từ `feature/recognize-v2`:
+
+1. Không tham số: response như cũ + `sharpness`. So `sharpness` với Mac Mini trên cùng crop (kỳ vọng gần bằng, khác do JPEG decode).
+2. Lấy event Frigate có nhiều người, gửi snapshot + `person_box=<data.box>`: chỉ còn mặt của người đó, `faces_outside_person_box` > 0.
+3. `cluster_strangers=true` với ảnh người lạ (không phải người nhà) 2 lần → `new` rồi `seen`; `GET /api/strangers`; promote thử
+   rồi xoá người vừa tạo; `DELETE /api/strangers` để dọn.
+4. Đo thêm `stranger_ms` khi có vài trăm vector người lạ.
