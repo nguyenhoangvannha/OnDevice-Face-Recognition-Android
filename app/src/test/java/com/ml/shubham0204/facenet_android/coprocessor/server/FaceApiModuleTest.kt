@@ -7,6 +7,8 @@ import com.ml.shubham0204.facenet_android.engine.PersonSummary
 import com.ml.shubham0204.facenet_android.engine.RecognitionResult
 import com.ml.shubham0204.facenet_android.engine.RecognitionTimings
 import com.ml.shubham0204.facenet_android.engine.RecognizedFace
+import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
+import com.ml.shubham0204.facenet_android.engine.NormalizedBox
 import com.ml.shubham0204.facenet_android.engine.RejectedImage
 import com.ml.shubham0204.facenet_android.engine.backend.BackendPhase
 import com.ml.shubham0204.facenet_android.engine.backend.BackendStatus
@@ -47,19 +49,25 @@ private const val TOKEN = "test-token-not-a-secret"
 private class FakeBackend : CoprocessorBackend {
     val persons = linkedMapOf(1L to PersonSummary(1, "An", 2, 1000))
     var lastLiveness: Boolean? = null
+    var lastOptions: RecognizeOptions? = null
 
     override suspend fun recognize(
         image: ByteArray,
-        withLiveness: Boolean,
+        options: RecognizeOptions,
     ): RecognizeOutcome {
         if (image.decodeToString() == "not-an-image") throw InvalidImageException()
-        lastLiveness = withLiveness
+        lastLiveness = options.withLiveness
+        lastOptions = options
         val faces =
             listOf(
                 RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true),
                 RecognizedFace(FaceBox(50, 60, 90, 99), null, null, 0.21f, false),
             )
-        return RecognizeOutcome(RecognitionResult(faces, 42, 640, 480, 0.7f, RecognitionTimings(10, 25, 7, 0)), 3)
+        val dropped = if (options.personBox != null) 1 else 0
+        return RecognizeOutcome(
+            RecognitionResult(faces, 42, 640, 480, 0.7f, RecognitionTimings(10, 25, 7, 0), options.personBox, dropped),
+            3,
+        )
     }
 
     override suspend fun enroll(
@@ -205,6 +213,64 @@ class FaceApiModuleTest {
 
             val notMultipart = client.post("/api/recognize") { auth(); contentType(ContentType.Application.Json); setBody("{}") }
             assertEquals(HttpStatusCode.UnsupportedMediaType, notMultipart.status)
+        }
+
+    @Test
+    fun recognizeAcceptsPersonBoxInQueryOrForm() =
+        api {
+            val plain =
+                client.post("/api/recognize") {
+                    header(HttpHeaders.Authorization, "Bearer $TOKEN")
+                    setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                }.json()
+            assertEquals(null, backend.lastOptions!!.personBox)
+            assertEquals("null", plain["person_box"].toString())
+            assertEquals(0, plain["faces_outside_person_box"]!!.jsonPrimitive.int)
+
+            val query =
+                client.post("/api/recognize?person_box=0.25,0.10,0.30,0.65") {
+                    header(HttpHeaders.Authorization, "Bearer $TOKEN")
+                    setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                }
+            assertEquals(HttpStatusCode.OK, query.status)
+            assertEquals(NormalizedBox(0.25f, 0.10f, 0.30f, 0.65f), backend.lastOptions!!.personBox)
+            val body = query.json()
+            assertEquals(4, body["person_box"]!!.jsonArray.size)
+            assertEquals(1, body["faces_outside_person_box"]!!.jsonPrimitive.int)
+
+            client.post("/api/recognize") {
+                header(HttpHeaders.Authorization, "Bearer $TOKEN")
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            append("person_box", "0,0,1,1")
+                            append(
+                                "image",
+                                "jpeg".toByteArray(),
+                                Headers.build {
+                                    append(HttpHeaders.ContentType, "image/jpeg")
+                                    append(HttpHeaders.ContentDisposition, "filename=\"a.jpg\"")
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
+            assertEquals(NormalizedBox(0f, 0f, 1f, 1f), backend.lastOptions!!.personBox)
+        }
+
+    @Test
+    fun recognizeRejectsInvalidPersonBox() =
+        api {
+            for (bad in listOf("0.1,0.2,0.3", "a,b,c,d", "0.8,0,0.3,0.5", "0,0,0,0.5", "-0.1,0,0.5,0.5", "NaN,0,0.5,0.5")) {
+                val res =
+                    client.post("/api/recognize?person_box=$bad") {
+                        header(HttpHeaders.Authorization, "Bearer $TOKEN")
+                        setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                    }
+                assertEquals(bad, HttpStatusCode.BadRequest, res.status)
+                assertEquals("invalid_person_box", res.json()["error"]!!.jsonPrimitive.content)
+            }
         }
 
     @Test

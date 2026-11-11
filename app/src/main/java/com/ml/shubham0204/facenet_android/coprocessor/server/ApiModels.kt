@@ -121,6 +121,9 @@ data class RecognizeResponse(
     val timings: TimingsDto,
     @SerialName("image_width") val imageWidth: Int,
     @SerialName("image_height") val imageHeight: Int,
+    /** Echo of `person_box` as [x, y, w, h]; null when none was sent. */
+    @SerialName("person_box") val personBox: List<Float>? = null,
+    @SerialName("faces_outside_person_box") val facesOutsidePersonBox: Int = 0,
 )
 
 @Serializable
@@ -258,6 +261,8 @@ fun RecognizeOutcome.toResponse(): RecognizeResponse =
             ),
         imageWidth = result.imageWidth,
         imageHeight = result.imageHeight,
+        personBox = result.personBox?.let { listOf(it.x, it.y, it.w, it.h) },
+        facesOutsidePersonBox = result.facesOutsidePersonBox,
     )
 
 fun EnrollResult.toResponse(): EnrollResponse =
