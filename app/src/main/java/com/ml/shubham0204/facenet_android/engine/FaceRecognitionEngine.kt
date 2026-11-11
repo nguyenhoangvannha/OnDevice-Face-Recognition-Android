@@ -43,9 +43,13 @@ class FaceRecognitionEngine(
         var embeddingMs = 0L
         var searchMs = 0L
         var spoofMs = 0L
+        var sharpnessMs = 0L
         val faces = ArrayList<RecognizedFace>(detections.size)
 
         for ((croppedFace, rect) in detections) {
+            val (sharpness, tSharp) = measureTimedValue { sharpnessOf(croppedFace) }
+            sharpnessMs += tSharp.toLong(DurationUnit.MILLISECONDS)
+
             val (embedding, tEmbed) = measureTimedValue { faceNet.getFaceEmbedding(croppedFace) }
             embeddingMs += tEmbed.toLong(DurationUnit.MILLISECONDS)
 
@@ -75,20 +79,27 @@ class FaceRecognitionEngine(
                     similarity = similarity,
                     isRecognized = recognized,
                     spoof = spoof,
+                    sharpness = sharpness,
                 )
         }
 
         val detectionMs = detectionTime.toLong(DurationUnit.MILLISECONDS)
         return RecognitionResult(
             faces = faces,
-            inferenceTimeMs = detectionMs + embeddingMs + searchMs + spoofMs,
+            inferenceTimeMs = detectionMs + embeddingMs + searchMs + spoofMs + sharpnessMs,
             imageWidth = bitmap.width,
             imageHeight = bitmap.height,
             threshold = threshold,
-            timings = RecognitionTimings(detectionMs, embeddingMs, searchMs, spoofMs),
+            timings = RecognitionTimings(detectionMs, embeddingMs, searchMs, spoofMs, sharpnessMs),
             personBox = options.personBox,
             facesOutsidePersonBox = allDetections.size - detections.size,
         )
+    }
+
+    private fun sharpnessOf(face: Bitmap): Float {
+        val pixels = IntArray(face.width * face.height)
+        face.getPixels(pixels, 0, face.width, 0, 0, face.width, face.height)
+        return Sharpness.laplacianVariance(pixels, face.width, face.height).toFloat()
     }
 
     /**

@@ -100,6 +100,8 @@ data class FaceDto(
     val similarity: Float,
     val recognized: Boolean,
     val spoof: SpoofDto? = null,
+    /** Variance of the Laplacian on the 112x112 grayscale face crop, 1 decimal. */
+    val sharpness: Float? = null,
 )
 
 @Serializable
@@ -109,6 +111,7 @@ data class TimingsDto(
     @SerialName("embedding_ms") val embeddingMs: Long,
     @SerialName("search_ms") val searchMs: Long,
     @SerialName("spoof_ms") val spoofMs: Long,
+    @SerialName("sharpness_ms") val sharpnessMs: Long = 0,
 )
 
 @Serializable
@@ -245,6 +248,7 @@ fun RecognizeOutcome.toResponse(): RecognizeResponse =
                     similarity = it.similarity,
                     recognized = it.isRecognized,
                     spoof = it.spoof?.let { s -> SpoofDto(s.isSpoof, s.score) },
+                    sharpness = it.sharpness?.let { v -> Math.round(v * 10.0) / 10.0f },
                 )
             },
         faceCount = result.faces.size,
@@ -258,6 +262,7 @@ fun RecognizeOutcome.toResponse(): RecognizeResponse =
                 embeddingMs = result.timings.embeddingMs,
                 searchMs = result.timings.searchMs,
                 spoofMs = result.timings.spoofMs,
+                sharpnessMs = result.timings.sharpnessMs,
             ),
         imageWidth = result.imageWidth,
         imageHeight = result.imageHeight,
