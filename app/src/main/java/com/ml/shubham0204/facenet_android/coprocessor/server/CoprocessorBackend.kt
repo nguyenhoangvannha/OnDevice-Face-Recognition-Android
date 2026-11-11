@@ -2,6 +2,7 @@ package com.ml.shubham0204.facenet_android.coprocessor.server
 
 import com.ml.shubham0204.facenet_android.engine.EnrollResult
 import com.ml.shubham0204.facenet_android.engine.PersonSummary
+import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
 import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
 
 /** What the REST layer needs from the app. Faked in JVM tests. */
@@ -9,7 +10,7 @@ interface CoprocessorBackend {
     /** @throws InvalidImageException when the bytes are not a decodable image. */
     suspend fun recognize(
         image: ByteArray,
-        withLiveness: Boolean,
+        options: RecognizeOptions,
     ): RecognizeOutcome
 
     /** @throws InvalidImageException when any image cannot be decoded. */

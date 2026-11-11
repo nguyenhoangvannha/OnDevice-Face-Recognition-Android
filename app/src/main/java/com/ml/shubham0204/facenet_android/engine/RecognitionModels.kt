@@ -41,6 +41,10 @@ data class RecognitionResult(
     val imageHeight: Int,
     val threshold: Float,
     val timings: RecognitionTimings,
+    /** Echo of the request's person box (null when none was sent). */
+    val personBox: NormalizedBox? = null,
+    /** Faces ML Kit found but dropped before embedding because they were outside [personBox]. */
+    val facesOutsidePersonBox: Int = 0,
 )
 
 data class RejectedImage(

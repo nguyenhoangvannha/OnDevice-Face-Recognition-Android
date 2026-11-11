@@ -13,7 +13,7 @@ import java.net.URL
 /** Starts the real CIO engine on a free local port (JVM, not Android). */
 class FaceApiServerTest {
     private object NoBackend : CoprocessorBackend {
-        override suspend fun recognize(image: ByteArray, withLiveness: Boolean): RecognizeOutcome = error("unused")
+        override suspend fun recognize(image: ByteArray, options: com.ml.shubham0204.facenet_android.engine.RecognizeOptions): RecognizeOutcome = error("unused")
 
         override suspend fun enroll(name: String, images: List<ByteArray>): EnrollResult = error("unused")
 

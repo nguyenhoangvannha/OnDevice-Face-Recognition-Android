@@ -16,6 +16,7 @@ import com.ml.shubham0204.facenet_android.engine.EnrollResult
 import com.ml.shubham0204.facenet_android.engine.FaceRecognitionEngine
 import com.ml.shubham0204.facenet_android.engine.ImageDecoding
 import com.ml.shubham0204.facenet_android.engine.PersonSummary
+import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Single
@@ -42,12 +43,12 @@ class AndroidCoprocessorBackend(
 
     override suspend fun recognize(
         image: ByteArray,
-        withLiveness: Boolean,
+        options: RecognizeOptions,
     ): RecognizeOutcome =
         withContext(Dispatchers.Default) {
             val (bitmap, decodeTime) = measureTimedValue { ImageDecoding.decode(image) }
             if (bitmap == null) throw InvalidImageException()
-            val result = engine.recognize(bitmap, settings.threshold, withLiveness)
+            val result = engine.recognize(bitmap, settings.threshold, options)
             RecognizeOutcome(result, decodeTime.toLong(DurationUnit.MILLISECONDS))
         }
 

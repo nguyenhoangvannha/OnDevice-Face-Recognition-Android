@@ -3,6 +3,8 @@ package com.ml.shubham0204.facenet_android.coprocessor.server
 import com.ml.shubham0204.facenet_android.coprocessor.RequestLogEntry
 import com.ml.shubham0204.facenet_android.coprocessor.TokenUtils
 import com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableException
+import com.ml.shubham0204.facenet_android.engine.NormalizedBox
+import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
 import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -151,8 +153,8 @@ fun Application.faceApiModule(
                     return@post
                 }
                 if (image.isEmpty()) throw InvalidImageException("Image is empty")
-                val liveness = call.request.queryParameters["liveness"]?.toBooleanStrictOrNull() ?: false
-                val outcome = backend.recognize(image, liveness)
+                val options = call.recognizeOptionsOrRespond(payload) ?: return@post
+                val outcome = backend.recognize(image, options)
                 call.attributes.put(InferenceMsKey, outcome.result.inferenceTimeMs)
                 call.attributes.put(FaceCountKey, outcome.result.faces.size)
                 call.attributes.put(RecognizedCountKey, outcome.result.faces.count { it.isRecognized })
@@ -239,6 +241,29 @@ private suspend fun <T> ApplicationCall.receiveSmallJson(serializer: kotlinx.ser
     } catch (e: IllegalArgumentException) { // includes SerializationException
         null
     }
+}
+
+/** Query parameter, else multipart form field of the same name. */
+private fun ApplicationCall.recognizeParam(
+    payload: MultipartPayload,
+    name: String,
+): String? = request.queryParameters[name] ?: payload.fields[name]
+
+/** Parses the optional recognize parameters; responds 400 and returns null when one is invalid. */
+private suspend fun ApplicationCall.recognizeOptionsOrRespond(payload: MultipartPayload): RecognizeOptions? {
+    // v1 behaviour kept: anything but "true" means no liveness.
+    val liveness = recognizeParam(payload, "liveness")?.toBooleanStrictOrNull() ?: false
+    val personBox =
+        recognizeParam(payload, "person_box")?.let { raw ->
+            NormalizedBox.parse(raw) ?: run {
+                respond(
+                    HttpStatusCode.BadRequest,
+                    ApiError("invalid_person_box", "person_box must be x,y,w,h in 0..1 with x+w <= 1 and y+h <= 1"),
+                )
+                return null
+            }
+        }
+    return RecognizeOptions(withLiveness = liveness, personBox = personBox)
 }
 
 /** Parses {id}; responds 400 and returns null when it is not a positive integer. */

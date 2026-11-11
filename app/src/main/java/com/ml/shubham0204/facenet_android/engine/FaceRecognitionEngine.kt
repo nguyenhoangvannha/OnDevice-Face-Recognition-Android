@@ -28,10 +28,18 @@ class FaceRecognitionEngine(
     suspend fun recognize(
         bitmap: Bitmap,
         threshold: Float,
-        withLiveness: Boolean = false,
+        options: RecognizeOptions = RecognizeOptions(),
     ): RecognitionResult {
-        val (detections, detectionTime) =
+        val withLiveness = options.withLiveness
+        val (allDetections, detectionTime) =
             measureTimedValue { faceDetector.getAllCroppedFaces(bitmap, highAccuracy = true) }
+        // Drop faces outside the client's person box before paying for an embedding.
+        val detections =
+            options.personBox?.let { box ->
+                allDetections.filter { (_, r) ->
+                    PersonBoxFilter.keeps(FaceBox(r.left, r.top, r.right, r.bottom), box, bitmap.width, bitmap.height)
+                }
+            } ?: allDetections
         var embeddingMs = 0L
         var searchMs = 0L
         var spoofMs = 0L
@@ -78,6 +86,8 @@ class FaceRecognitionEngine(
             imageHeight = bitmap.height,
             threshold = threshold,
             timings = RecognitionTimings(detectionMs, embeddingMs, searchMs, spoofMs),
+            personBox = options.personBox,
+            facesOutsidePersonBox = allDetections.size - detections.size,
         )
     }
 
