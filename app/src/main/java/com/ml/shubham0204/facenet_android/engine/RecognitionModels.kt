@@ -65,6 +65,9 @@ data class RecognitionResult(
     val personBox: NormalizedBox? = null,
     /** Faces ML Kit found but dropped before embedding because they were outside [personBox]. */
     val facesOutsidePersonBox: Int = 0,
+    val eventId: String? = null,
+    /** The request's event id was already seen (within the tracker's TTL). */
+    val eventRepeat: Boolean = false,
 )
 
 data class RejectedImage(

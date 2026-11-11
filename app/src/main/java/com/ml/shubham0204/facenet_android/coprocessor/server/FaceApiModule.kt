@@ -6,6 +6,7 @@ import com.ml.shubham0204.facenet_android.engine.backend.BackendUnavailableExcep
 import com.ml.shubham0204.facenet_android.engine.NormalizedBox
 import com.ml.shubham0204.facenet_android.engine.RecognizeOptions
 import com.ml.shubham0204.facenet_android.engine.backend.InferenceBackend
+import com.ml.shubham0204.facenet_android.engine.strangers.EventIds
 import com.ml.shubham0204.facenet_android.engine.strangers.PromoteResult
 import com.ml.shubham0204.facenet_android.engine.strangers.PromoteTarget
 import io.ktor.http.ContentType
@@ -336,7 +337,17 @@ private suspend fun ApplicationCall.recognizeOptionsOrRespond(payload: Multipart
         )
         return null
     }
-    return RecognizeOptions(withLiveness = liveness, personBox = personBox, clusterStrangers = clusterStrangers)
+    val eventId =
+        recognizeParam(payload, "event_id")?.let { raw ->
+            raw.takeIf { EventIds.isValid(it) } ?: run {
+                respond(
+                    HttpStatusCode.BadRequest,
+                    ApiError("invalid_event_id", "event_id must be 1..${EventIds.MAX_LENGTH} chars of A-Z a-z 0-9 . _ : -"),
+                )
+                return null
+            }
+        }
+    return RecognizeOptions(withLiveness = liveness, personBox = personBox, clusterStrangers = clusterStrangers, eventId = eventId)
 }
 
 /** Absent → false; "true"/"false" → value; anything else → 400 and null. */

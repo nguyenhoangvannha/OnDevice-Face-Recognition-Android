@@ -66,11 +66,12 @@ private class FakeBackend : CoprocessorBackend {
         lastLiveness = options.withLiveness
         lastOptions = options
         val unknown = RecognizedFace(FaceBox(50, 60, 90, 99), null, null, 0.21f, false)
+        val event = options.eventId?.let { strangers.beginEvent(it) }
         val faces =
             if (!options.clusterStrangers) {
                 listOf(RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true, sharpness = 168.44f), unknown)
             } else {
-                val m = strangers.assign(floatArrayOf(1f, 0f, 0f), 60, strangerThreshold)
+                val m = strangers.assign(floatArrayOf(1f, 0f, 0f), 60, strangerThreshold, nextSharpness, event)
                 listOf(
                     RecognizedFace(FaceBox(1, 2, 30, 40), 1, "An", 0.82f, true, stranger = StrangerInfo(isStranger = false)),
                     unknown.copy(
@@ -80,7 +81,7 @@ private class FakeBackend : CoprocessorBackend {
             }
         val dropped = if (options.personBox != null) 1 else 0
         return RecognizeOutcome(
-            RecognitionResult(faces, 42, 640, 480, 0.7f, RecognitionTimings(10, 25, 7, 0), options.personBox, dropped),
+            RecognitionResult(faces, 42, 640, 480, 0.7f, RecognitionTimings(10, 25, 7, 0), options.personBox, dropped, event?.eventId, event?.repeat ?: false),
             3,
         )
     }
@@ -133,6 +134,7 @@ private class FakeBackend : CoprocessorBackend {
     val household = FakeHousehold()
     val strangers = StrangerClusterer(InMemoryStrangerStore(), household)
     var strangerThreshold = 0.7f
+    var nextSharpness: Float? = 100f
 
     override suspend fun listStrangers(): List<StrangerCluster> = strangers.list()
 
@@ -421,6 +423,66 @@ class FaceApiModuleTest {
             assertEquals(HttpStatusCode.BadRequest, call("?demographics=1").status)
             val face = call("").json()["faces"]!!.jsonArray[0].jsonObject
             assertEquals(false, face.containsKey("gender"))
+        }
+
+    @Test
+    fun eventIdIsEchoedAndRepeatsDoNotCountTwice() =
+        api {
+            val auth: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $TOKEN") }
+            suspend fun recognize(query: String) =
+                client.post("/api/recognize$query") {
+                    auth()
+                    setBody(MultiPartFormDataContent(imagePart("jpeg".toByteArray())))
+                }
+
+            val plain = recognize("").json()
+            assertEquals("null", plain["event_id"].toString())
+            assertEquals(false, plain["event_repeat"]!!.jsonPrimitive.content.toBoolean())
+
+            val id = "1794372518.917899-f7uo07"
+            val first = recognize("?cluster_strangers=true&event_id=$id").json()
+            assertEquals(id, first["event_id"]!!.jsonPrimitive.content)
+            assertEquals(false, first["event_repeat"]!!.jsonPrimitive.content.toBoolean())
+            assertEquals("new", first["faces"]!!.jsonArray[1].jsonObject["stranger_status"]!!.jsonPrimitive.content)
+
+            backend.nextSharpness = 50f // blurrier frame: no new embedding
+            val again = recognize("?cluster_strangers=true&event_id=$id").json()
+            assertEquals(true, again["event_repeat"]!!.jsonPrimitive.content.toBoolean())
+            val face = again["faces"]!!.jsonArray[1].jsonObject
+            assertEquals("seen", face["stranger_status"]!!.jsonPrimitive.content)
+            assertEquals(1L, face["appearances"]!!.jsonPrimitive.long)
+            assertEquals(1, backend.strangers.list().single().numEmbeddings)
+
+            backend.nextSharpness = 300f // sharper frame: embedding added, still one appearance
+            recognize("?cluster_strangers=true&event_id=$id")
+            assertEquals(2, backend.strangers.list().single().numEmbeddings)
+            assertEquals(1L, backend.strangers.list().single().appearances)
+
+            // Multipart field works too; a new event counts again
+            val other =
+                client.post("/api/recognize?cluster_strangers=true") {
+                    auth()
+                    setBody(
+                        MultiPartFormDataContent(
+                            io.ktor.client.request.forms.formData {
+                                append("event_id", "evt-2")
+                                append("image", "jpeg".toByteArray(), io.ktor.http.Headers.build {
+                                    append(HttpHeaders.ContentType, "image/jpeg")
+                                    append(HttpHeaders.ContentDisposition, "filename=\"a.jpg\"")
+                                })
+                            },
+                        ),
+                    )
+                }.json()
+            assertEquals("evt-2", other["event_id"]!!.jsonPrimitive.content)
+            assertEquals(2L, other["faces"]!!.jsonArray[1].jsonObject["appearances"]!!.jsonPrimitive.long)
+
+            for (bad in listOf("", "a%20b", "x".repeat(65), "%3Cscript%3E", "a/b")) {
+                val res = recognize("?event_id=$bad")
+                assertEquals(bad, HttpStatusCode.BadRequest, res.status)
+                assertEquals("invalid_event_id", res.json()["error"]!!.jsonPrimitive.content)
+            }
+            assertEquals(HttpStatusCode.OK, recognize("?event_id=" + "x".repeat(64)).status)
         }
 
     @Test

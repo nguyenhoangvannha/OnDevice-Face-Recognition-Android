@@ -34,6 +34,7 @@ class FaceRecognitionEngine(
         strangerThreshold: Float = threshold,
     ): RecognitionResult {
         val withLiveness = options.withLiveness
+        val event = options.eventId?.let { strangers.beginEvent(it) }
         val (allDetections, detectionTime) =
             measureTimedValue { faceDetector.getAllCroppedFaces(bitmap, highAccuracy = true) }
         // Drop faces outside the client's person box before paying for an embedding.
@@ -81,7 +82,7 @@ class FaceRecognitionEngine(
                         !options.clusterStrangers -> null
                         recognized -> StrangerInfo(isStranger = false)
                         else -> {
-                            val match = strangers.assign(embedding, minOf(rect.width(), rect.height()), strangerThreshold)
+                            val match = strangers.assign(embedding, minOf(rect.width(), rect.height()), strangerThreshold, sharpness, event)
                             StrangerInfo(
                                 isStranger = true,
                                 strangerId = match.cluster?.id,
@@ -118,6 +119,8 @@ class FaceRecognitionEngine(
             timings = RecognitionTimings(detectionMs, embeddingMs, searchMs, spoofMs, sharpnessMs, strangerMs),
             personBox = options.personBox,
             facesOutsidePersonBox = allDetections.size - detections.size,
+            eventId = event?.eventId,
+            eventRepeat = event?.repeat ?: false,
         )
     }
 

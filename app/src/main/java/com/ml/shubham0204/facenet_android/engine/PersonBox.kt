@@ -66,4 +66,6 @@ data class RecognizeOptions(
     val personBox: NormalizedBox? = null,
     /** Match unknown faces against stranger clusters and create "Person_NN" clusters. */
     val clusterStrangers: Boolean = false,
+    /** Client event id (e.g. Frigate event id); repeated frames of one event are not counted twice. */
+    val eventId: String? = null,
 )

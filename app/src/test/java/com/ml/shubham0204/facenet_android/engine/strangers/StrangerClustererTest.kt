@@ -129,6 +129,75 @@ class StrangerClustererTest {
     }
 
     @Test
+    fun repeatedEventCountsOnceAndKeepsOnlySharperFrames() {
+        val e1 = clusterer.beginEvent("evt")
+        assertEquals(StrangerStatus.NEW, clusterer.assign(v(0), 80, 0.7f, 100f, e1).status)
+        val e2 = clusterer.beginEvent("evt")
+        assertTrue(e2.repeat)
+        now += 5
+        val blurry = clusterer.assign(v(0, 0.1f), 80, 0.7f, 40f, e2)
+        assertEquals(StrangerStatus.SEEN, blurry.status)
+        assertEquals(1L, blurry.cluster!!.appearances)
+        assertEquals(1, blurry.cluster!!.numEmbeddings)
+        assertEquals(1_005L, blurry.cluster!!.lastSeenMs)
+        val sharp = clusterer.assign(v(0, 0.1f), 80, 0.7f, 150f, clusterer.beginEvent("evt"))
+        assertEquals(1L, sharp.cluster!!.appearances)
+        assertEquals(2, sharp.cluster!!.numEmbeddings)
+        // Not sharper than the best of this event (150) any more
+        assertEquals(2, clusterer.assign(v(0, 0.1f), 80, 0.7f, 120f, clusterer.beginEvent("evt")).cluster!!.numEmbeddings)
+        // A different event counts a new appearance
+        assertEquals(2L, clusterer.assign(v(0), 80, 0.7f, 10f, clusterer.beginEvent("evt-2")).cluster!!.appearances)
+    }
+
+    @Test
+    fun embeddingCapStillAppliesWithinAnEvent() {
+        clusterer.assign(v(0), 80, 0.7f, 1f, clusterer.beginEvent("evt"))
+        for (i in 2..6) {
+            now += 1
+            clusterer.assign(v(0, i * 0.01f), 80, 0.7f, i.toFloat(), clusterer.beginEvent("evt"))
+        }
+        val c = clusterer.list().single()
+        assertEquals(1L, c.appearances)
+        assertEquals(2, c.numEmbeddings) // maxEmbeddingsPerCluster = 2 in this test
+    }
+
+    @Test
+    fun repeatedEventDoesNotCreateADuplicateCluster() {
+        clusterer.assign(v(0), 80, 0.7f, 100f, clusterer.beginEvent("evt"))
+        // Same person turned away: below threshold, would normally create Person_02
+        val turned = clusterer.assign(v(0, 1.2f), 80, 0.7f, 200f, clusterer.beginEvent("evt"))
+        assertEquals(StrangerStatus.SEEN, turned.status)
+        assertEquals("Person_01", turned.cluster!!.label)
+        assertEquals(1, clusterer.count())
+        assertEquals(2, turned.cluster!!.numEmbeddings) // sharper, so kept
+        // Without an event id the same face does create a new cluster
+        assertEquals(StrangerStatus.NEW, clusterer.assign(v(3), 80, 0.7f).status)
+    }
+
+    @Test
+    fun firstRequestOfAnEventMayCreateSeveralClusters() {
+        val e = clusterer.beginEvent("evt")
+        assertEquals(StrangerStatus.NEW, clusterer.assign(v(0), 80, 0.7f, 1f, e).status)
+        assertEquals(StrangerStatus.NEW, clusterer.assign(v(4), 80, 0.7f, 1f, e).status)
+        assertEquals(2, clusterer.count())
+    }
+
+    @Test
+    fun deletedClusterIsForgottenByItsEvent() {
+        val id = clusterer.assign(v(0), 80, 0.7f, 1f, clusterer.beginEvent("evt")).cluster!!.id
+        clusterer.delete(id)
+        val m = clusterer.assign(v(0), 80, 0.7f, 1f, clusterer.beginEvent("evt"))
+        assertEquals(StrangerStatus.NEW, m.status)
+        assertEquals("Person_02", m.cluster!!.label)
+    }
+
+    @Test
+    fun tooSmallFacesStayTooSmallInEvents() {
+        assertEquals(StrangerStatus.TOO_SMALL, clusterer.assign(v(0), 10, 0.7f, 1f, clusterer.beginEvent("evt")).status)
+        assertEquals(StrangerStatus.NEW, clusterer.assign(v(0), 80, 0.7f, 1f, clusterer.beginEvent("evt")).status)
+    }
+
+    @Test
     fun labelsUseTwoDigitsThenGrow() {
         assertEquals("Person_07", StrangerCluster.labelFor(7))
         assertEquals("Person_123", StrangerCluster.labelFor(123))

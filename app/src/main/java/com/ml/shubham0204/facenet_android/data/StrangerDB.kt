@@ -46,17 +46,20 @@ class StrangerDB(
     override fun recordAppearance(
         id: Long,
         nowMs: Long,
-        embedding: FloatArray,
+        embedding: FloatArray?,
         maxEmbeddings: Int,
+        countAppearance: Boolean,
     ): StrangerCluster =
         store.callInTx {
             val record = clusters.get(id) ?: error("Stranger $id not found")
-            record.appearances += 1
+            if (countAppearance) record.appearances += 1
             record.lastSeenMs = nowMs
             clusters.put(record)
-            vectors.put(StrangerEmbeddingRecord(strangerID = id, addedMs = nowMs, embedding = embedding))
-            val own = vectorsOf(id).sortedByDescending { it.addedMs }
-            if (own.size > maxEmbeddings) vectors.remove(own.drop(maxEmbeddings))
+            if (embedding != null) {
+                vectors.put(StrangerEmbeddingRecord(strangerID = id, addedMs = nowMs, embedding = embedding))
+                val own = vectorsOf(id).sortedByDescending { it.addedMs }
+                if (own.size > maxEmbeddings) vectors.remove(own.drop(maxEmbeddings))
+            }
             record.toCluster()
         }
 
