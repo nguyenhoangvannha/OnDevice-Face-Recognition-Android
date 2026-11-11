@@ -95,7 +95,7 @@ sai → `400 invalid_parameter` (khác `liveness` cũ, vẫn giữ kiểu lỏng
 
 Trạng thái 2026-11-11: bước 1–6 **đã làm** trên `feature/recognize-v2` (81 test JVM + 10 test Python qua, debug/release build
 qua). **Chưa** thử trên điện thoại. Chưa có: `event_id` chống đếm trùng, giao diện quản trị người lạ trên trang web
-(dùng API/client Python), test ObjectBox thật cho `StrangerDB`.
+(**đã làm** sau đó ở `feature/web-strangers`), test ObjectBox thật cho `StrangerDB`.
 
 
 1. Tài liệu này. 2. `person_box`. 3. `sharpness`. 4. Gom cụm người lạ + API quản trị + cài đặt. 5. `demographics` → 501.

@@ -205,3 +205,12 @@ Commit: `15730b9 feat(inference): let users choose CPU or GPU (Vulkan) backend w
   Ba lựa chọn trong lộ trình, chờ anh quyết.
 - Trang web: ô `person_box`, ô gom người lạ, nhãn có `Person_NN`/trạng thái/độ nét. Client Python: tham số mới + quản trị người lạ.
 - 81/81 test JVM, 10/10 test Python, debug + release build qua. Chưa thử trên điện thoại. PR vào `main`, chưa merge.
+
+## 2026-11-11 — Màn hình người lạ trên trang web (nhánh `feature/web-strangers`)
+
+- Anh đã merge PR #3 và #4. Nhánh mới từ `main`.
+- Trang web thêm khối **Strangers**: bảng `Person_NN` (số lần thấy, số embedding, lần đầu/cuối), gán vào người quen (dropdown
+  từ `/api/persons` → promote `person_id`), tạo người mới (tên → promote `name`, cảnh báo khi trùng tên), xoá một cụm / xoá hết
+  (có xác nhận), ngưỡng người lạ. Không đổi backend; mọi tên chèn bằng `textContent`.
+- Test: 82/82 JVM (thêm kiểm trang không dùng `innerHTML`), debug + release build qua; Chrome headless với API giả
+  (`tools/web-ui-test/`) 17/17. Chưa mở trên điện thoại.
