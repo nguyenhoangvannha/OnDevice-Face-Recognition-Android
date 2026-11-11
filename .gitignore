@@ -18,3 +18,4 @@ __pycache__/
 # Release signing material never goes into git (CI decodes it from secrets)
 *.jks
 *.keystore
+node_modules/
